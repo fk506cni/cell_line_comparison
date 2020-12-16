@@ -1,6 +1,6 @@
-## analysis flows in cell line comparison.
+## analysis codes and flows in cell line comparison.
 
-There are Rmarkdown files (.rmd) and their output htmls by Rstudio.  
+There are Rmarkdown files (.rmd) and their output htmls (.html) by Rstudio.  
 Starting materials such as "CCLE_Expression.Arrays_2013-03-18.tar.gz" are not deposited here.  
 Please get them from Broad Institute, TCGA, NCBI GEO and so on.  
 
@@ -14,11 +14,11 @@ Description of each file and the purpose.
     - Clustering in liver cancer cell lines.
     - DEG analysis in liver cancer cell line cluster.
 
-- 145cell_establish_rep
-    - Comparison of cell line establishment reports.
-
 - 103_g2array_david _mod
     - Gene ontology enrichment analysis using DAVID
+
+- 145cell_establish_rep
+    - Comparison of cell line establishment reports.
 
 - 126TCGA_Celllinecomparison_mod
     - Expression pattern analysis using TCGA HCC cohort

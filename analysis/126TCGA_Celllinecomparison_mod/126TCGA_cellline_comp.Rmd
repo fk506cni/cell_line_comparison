@@ -1,0 +1,849 @@
+---
+title: "126TCGA_cellline_comp"
+author: "fkeita"
+date: "2017/5/20"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+
+##TCGA HCC sample and CCLE array comparison
+```{r}
+knitr::opts_chunk$set(echo = TRUE, cache = TRUE,cache.lazy = FALSE, echo=TRUE)
+# source("http://bioconductor.org/biocLite.R")
+require("stringr")
+require("MASS")
+require("gplots")
+require("limma")
+# BiocManager::install("RTCGAToolbox")
+require("RTCGAToolbox")
+require(extrafont)
+
+loadfonts(quiet = T, dev="win")
+target_dis <- "LIHC"
+q_value_cuttoff <- 0.0001
+set.seed("20170831")
+```
+
+
+##read annot and array data  
+data from R87 2g array re
+```{r}
+annot <- read.table(file = "2Garray.annot_2.txt",header = T,sep = "\t",stringsAsFactors = F)
+colnames(annot)[2] <- "Probe_setID"
+deg <- annot[annot$q.value < q_value_cuttoff,]
+deg <- deg[sort.list(deg$avg_sub,decreasing = T),]
+deg$gene4match <- deg$Gene.Symbol
+deg$gene4match <- str_replace_all(deg$gene4match,pattern = "LOC[0-9]* /// ", "")
+deg$gene4match <- str_replace(deg$gene4match,pattern = " /// [-\ /a-zA-Z0-9]*$","")
+deg <- deg[deg$gene4match !="---",]
+deg$gene4match <- limma::alias2SymbolTable(deg$gene4match)
+deg <- deg[!base::duplicated(deg$gene4match),]
+deg <- deg[!is.na(deg$gene4match),]
+
+A_symbols <- deg[deg$gene_cluster=="A",]$gene4match
+B_symbols <- deg[deg$gene_cluster=="B",]$gene4match
+```
+
+##TCGA data
+```{r}
+getFirehoseDatasets()
+
+stddata <- getFirehoseRunningDates()
+show(stddata)
+
+tcgadata <- getFirehoseData(dataset = target_dis, runDate = "20160128",
+                           RNAseq2_Gene_Norm = T, Clinic = T, forceDownload =T)
+
+rnaseq2dat <- getData(tcgadata, type = "RNASeq2GeneNorm")
+```
+
+```{r}
+ref_sort <- function(sort_vector, ref_vector){
+  result_vector <- c()
+  for(i in c(1:length(ref_vector))){
+    index_i <- which(sort_vector==ref_vector[i])
+    result_vector <- c(result_vector, index_i)
+  }
+  return(result_vector)
+}
+```
+
+
+```{r}
+rna <- rnaseq2dat
+rna <- rna[,substr(colnames(rna),14,15) =="01"]
+
+rna <- rna[limma::alias2SymbolTable(rownames(rna)) %in% deg$gene4match,]
+rownames(rna) <- limma::alias2SymbolTable(rownames(rna))
+
+rna <- rna[ref_sort(sort_vector = rownames(rna),
+                    ref_vector = deg$gene4match),]
+
+#sum(base::duplicated(limma::alias2SymbolTable(rownames(rna))))
+#sum(deg$gene4match %in% rownames(rna))
+#deg$gene4match[!deg$gene4match %in% rownames(rna)]
+```
+
+##+1 and log2 conversion for visualization
+```{r}
+rna4vis <- log2(rna +1)
+truehist(rna4vis)
+```
+
+##merge
+```{r}
+mg <- merge(deg,rna4vis,by.x="gene4match", by.y=0, sort=F)
+
+rownames(mg) <- mg$gene4match
+rowlabel <- ifelse(mg$gene_cluster=="A","red","blue")
+
+h <- mg[,str_detect(colnames(mg),"^TCGA-")]
+```
+
+##heatmap
+```{r}
+par(family="Arial")
+heatmap.2(x = as.matrix(h),Rowv = F,Colv = T,dendrogram = "col",col = bluered(256),trace = "none",cexRow = 0.5,cexCol = 0.08,srtRow = 45,srtCol = 45, main = "DEG among TCGA HCC samples",RowSideColors = rowlabel,symbreaks=F,symm=F,symkey=F,lwid = c(2,10))
+
+lm2 <- rbind(c(0,6,4),c(0,2,5),c(1,3,0))
+lh <- c(1,0.2,4)
+lw <- c(0.1,2,0.3)
+
+
+clst_result <- hclust(as.dist(1-cor(as.matrix(h),method = "spearman")),method = "average")
+clst_result <- cutree(clst_result,k = 2)
+clst_result <- cbind(clst_result, ifelse(clst_result==1, yes = "pink",no = "cyan"))
+summary(clst_result)
+clst_result <- as.data.frame(clst_result)
+clst_result$V2 <- as.character(clst_result$V2)
+
+
+hm <- heatmap.2(x = as.matrix(h),Rowv = F,Colv = T,dendrogram = "col",col = bluered(256),trace = "none",cexRow = 0.1,cexCol = 0.5,srtRow = 45,srtCol = 45, main = "DEG between 2 clusters",RowSideColors = rowlabel,ColSideColors = clst_result[,2],symbreaks=F,symm=F,symkey=F,hclustfun = function(x) hclust(x,method = "average"),distfun = function(x) as.dist(1-cor(as.matrix(t(x)),method = "spearman")))
+
+dev.off()
+
+lm2 <- rbind(c(0,6,0),c(0,5,4),c(0,2,0),c(1,3,0))
+lh <- c(1,1,0.2,4)
+lw <- c(0.1,2,0.1)
+
+hm2 <- heatmap.2(x = as.matrix(h),
+                 Rowv = F,
+                 Colv = T,
+                 dendrogram = "col",
+                 col = bluered(256),
+                 trace = "none",
+                 labCol = NA, labRow = NA,
+                 # cexRow = 0.1,
+                 # cexCol = 0.5,
+                 # srtRow = 45,srtCol = 45,
+                 RowSideColors = rowlabel,
+                 ColSideColors = clst_result$V2,
+                 symbreaks=F,symm=F,symkey=F,
+                 hclustfun = function(x) hclust(x,method = "average"),
+                 distfun = function(x) as.dist(1-cor(as.matrix(t(x)),method = "spearman")),
+                 lmat = lm2,lhei = lh,lwid = lw,
+                 key.par = list(mar=c(0,12,3,12)),key.xlab = NA,margins = c(1,1))
+
+
+dev.off()
+
+tiff(filename = "heatmap.tcgarnaseq.tiff",width = 1920, height = 1920,units = "px",res = 300,bg = "white")
+hm2 <- heatmap.2(x = as.matrix(h),
+                 Rowv = F,
+                 Colv = T,
+                 dendrogram = "col",
+                 col = bluered(256),
+                 trace = "none",
+                 labCol = NA, labRow = NA,
+                 # cexRow = 0.1,
+                 # cexCol = 0.5,
+                 # srtRow = 45,srtCol = 45,
+                 RowSideColors = rowlabel,
+                 ColSideColors = clst_result[,2],
+                 symbreaks=F,symm=F,symkey=F,
+                 hclustfun = function(x) hclust(x,method = "average"),
+                 distfun = function(x) as.dist(1-cor(as.matrix(t(x)),method = "spearman")),
+                 lmat = lm2,lhei = lh,lwid = lw,
+                 key.par = list(mar=c(0,12,3,12)),key.xlab = NA,margins = c(1,1))
+dev.off()
+```
+
+##deg recheck
+```{r}
+h_deg <- rna
+h_deg <- round(h_deg)
+
+require(DESeq2)
+colData <- data.frame(condition=as.factor(clst_result[,1]))
+e <- DESeqDataSetFromMatrix(countData = h_deg,colData = colData,design = ~condition)
+e <- DESeq(e)
+
+result_e <- results(e)
+p.val <- result_e$pvalue
+p.val[is.na(p.val)] <- 1
+q.val <- result_e$padj
+q.val[is.na(q.val)] <- 1
+foldchange <- result_e$log2FoldChange
+ranking <- rank(p.val)
+
+
+
+result_e$log2FoldChange
+
+result_deg <- data.frame(row.names = rownames(h_deg),p.val,q.val,ranking,foldchange,stringsAsFactors = F)
+result_deg$rowlabel <- NA
+#i <- 3
+#is.element(el =  rownames(result_deg)[i],set = B_symbols)
+for(i in c(1:length(result_deg$rowlabel))){
+  if(is.element(el =  rownames(result_deg)[i],set = A_symbols)){
+    result_deg$rowlabel[i] <- "red"
+  }else if(is.element(el =  rownames(result_deg)[i],set = B_symbols)){
+    result_deg$rowlabel[i] <- "blue"
+  }else{
+    print("unko")
+  }
+}
+
+
+result_deg$geneclass <- ifelse(result_deg$rowlabel=="red","A","B")
+
+##if you want not to sort by foldchange, skip below sentence
+result_deg <- result_deg[sort.list(result_deg$foldchange,decreasing = T),]
+
+result_deg$xval <- c(1:nrow(result_deg))
+
+bar1 <- barplot2(result_deg$foldchange,horiz = T,main = "unko")
+class(bar1)
+
+
+sum(duplicated(rownames(mg)))
+result4plot <- merge(result_deg,mg, by.x=0,by.y=0, sort=F)
+result4plot <- as.data.frame(result4plot)
+
+#if you want to sort by fold change...
+result4plot <- result4plot[sort.list(result4plot$foldchange, decreasing = T),]
+rowlabel <-  result4plot$rowlabel
+rowlabel
+h <- result4plot[,str_detect(colnames(result4plot),"^TCGA")]
+
+clst_result <- hclust(as.dist(1-cor(as.matrix(h),method = "spearman")),method = "average")
+clst_result <- cutree(clst_result,k = 2)
+clst_result <- cbind(clst_result, ifelse(clst_result==1, yes = "pink",no = "cyan"))
+summary(clst_result)
+clst_result <- as.data.frame(clst_result)
+clst_result$V2 <- as.character(clst_result$V2)
+
+bardata <- data.frame(foldchange=result4plot$foldchange,
+                      xval=result4plot$xval,
+                      geneclass=result4plot$geneclass,
+                      pval = result4plot$p.val,
+                      qval = result4plot$q.val,
+                      rowlabel = result4plot$rowlabel,
+                      stringsAsFactors = F)
+bardata$color_plan <- NA
+bar_cutoff <- 0.01
+for(i in c(1:length(bardata$color_plan))){
+  if(bardata$qval[i] <= bar_cutoff && bardata$geneclass[i]=="A"){
+    bardata$color_plan[i] <- "pink"
+  }else if(bardata$qval[i] <= bar_cutoff && bardata$geneclass[i]=="B"){
+    bardata$color_plan[i] <- "cyan"
+  }else if(bardata$qval[i] > bar_cutoff){
+    bardata$color_plan[i] <- "gray"
+  }else{
+    print("unko")
+  }
+}
+clst_result$V2
+
+
+```
+
+
+```{r}
+require(ggplot2)
+##make additional plot
+y_axis_posi <- bardata[which.min(abs(bardata$foldchange)),]$xval+0.5
+y_range <- c(max(bardata$foldchange), min(bardata$foldchange))
+y_tick_interval_int <- round(max(abs(y_range))/3)
+y_tick_interval <- seq(-3*y_tick_interval_int, 3*y_tick_interval_int, y_tick_interval_int)
+y_tick_interval <- y_tick_interval[min(bardata$foldchange) <= y_tick_interval & y_tick_interval <= max(bardata$foldchange)]
+
+y_tick <- data.frame(x=y_axis_posi, y=y_tick_interval, xend=y_axis_posi+0.5, yend=y_tick_interval)
+
+theme_ggh <- function(font.size=10) {
+              theme(axis.text.x = element_blank(),
+              axis.text.y = element_blank(),
+              axis.title = element_blank(),
+              axis.line = element_blank(),
+              axis.ticks = element_blank(),
+              plot.title = element_blank(),
+              panel.grid = element_blank(),
+              panel.border = element_blank(),
+              panel.spacing = element_blank(),
+              panel.background = element_blank(),
+              plot.background = element_blank(),
+              plot.margin = unit(c(0,0,0,0),"cm"),
+              text = element_text(family = "Arial",size=font.size,lineheight = 0.7),
+              legend.position = "none"
+)
+}
+
+b1 <- ggplot()+
+      geom_vline(xintercept = y_axis_posi)+
+      geom_bar(mapping = aes(x=xval,y = foldchange,fill=color_plan),
+               data = bardata,stat = "identity",show.legend = F)+
+      scale_fill_identity(guide = "legend")+
+      scale_x_continuous(expand=c(0,0), limits = c(min(bardata$xval)-0.5,max(bardata$xval)+0.5),position = )+ 
+      scale_y_continuous(expand=c(0,0))+
+      coord_flip()+
+      theme_classic()+
+      theme_ggh()+
+      geom_hline(yintercept = 0)+
+      geom_segment(data = y_tick,mapping = aes(x=x, y=y, xend=xend, yend=yend),size=1)+
+      geom_text(data = y_tick,mapping =aes(x=y_axis_posi,y = y,label=y),vjust=1.5, hjust=1.5, size=6)+
+      theme(legend.position = "none",
+            axis.title.x = element_blank(),
+            axis.title.y = element_blank(),
+            axis.line.y = element_blank(),
+            axis.ticks.y = element_blank(),
+            axis.text.y = element_blank(),
+            plot.margin = unit(c(0,0,0,0),"native"))
+b1
+
+
+# df <- h[]
+# clst_method <- "average"
+# dist_method <- "spearman"
+# font.size <- 10
+# colours <- c("red", "white", "blue")
+# colname_label <- T; rowname_label <- T
+# colangle <- 45;rowangle <- 45
+# ColV <- T; RowV <- F
+# key.axis.fontsize <- 12
+# 
+# colslider <- clst_result$V2
+# rowslider <- rowlabel
+#     lmat <- rbind(c(7,7,1,1,1,1),
+#                   c(7,7,5,1,1,1),
+#                   c(7,7,3,1,1,1),
+#                   c(6,4,2,9,10,1),
+#                   c(1,1,8,1,1,1))
+#     lwid <- c(0.2, 0.1, 1, 0.1,0.5,0.01)
+#     lhei <- c(0.1,0.2,0.1,2,0.01)
+# #rowslider <- c(rep("blue",10),rep("brown",15))
+# main <- "title"
+# add_p <- b1
+```
+
+##ggheat
+```{r }
+ggheat <- function(df,
+                   clst_method="average",
+                   dist_method="spearman",
+                   colslider, rowslider,
+                   ColV=T, RowV=T,
+                   colname_label=T, rowname_label=T,
+                   colangle=45, rowangle=45,
+                   colours=c("blue", "white", "red"),
+                   key.axis.fontsize=12,
+                   main="title",
+                   add_p=NULL,
+                   lmat=NULL,
+                   lhei=NULL,lwid=NULL,
+                   font.size=10){
+  require(ggplot2)
+  require(reshape2)##for melting
+  require(grid)
+  require(gridExtra)
+  require(ggdendro)
+  require(scales)
+  ##common theme function
+  theme_ggh <- function(font.size=10) {
+              theme(axis.text.x = element_blank(),
+              axis.text.y = element_blank(),
+              axis.title = element_blank(),
+              axis.line = element_blank(),
+              axis.ticks = element_blank(),
+              plot.title = element_blank(),
+              panel.grid = element_blank(),
+              panel.border = element_blank(),
+              panel.spacing = element_blank(),
+              panel.background = element_blank(),
+              plot.background = element_blank(),
+              plot.margin = unit(c(0,0,0,0),"cm"),
+              text = element_text(family = "Arial",size=font.size,lineheight = 0.7),
+              legend.position = "none"
+)
+  }
+  
+  ##blank grid for plotting blank
+  blank_grid <- grid.rect(gp=gpar(col="white"))
+
+  df <- as.data.frame(df)
+  
+  ##clustering if needed
+  if(ColV==T){
+     dist_x <- as.dist(1-cor(as.matrix(df),method = dist_method))
+     clst_x <- hclust(dist_x,method = clst_method)
+     df <- df[,clst_x$order]
+     colslider <- colslider[clst_x$order]
+  }
+  
+  if(RowV==T){
+     dist_y <- as.dist(1-cor(as.matrix(t(df)),method = dist_method))
+     clst_y <- hclust(dist_y,method = clst_method)
+     df <- df[clst_y$order,]
+     rowslider <- rowslider[clst_y$order]
+  }
+  
+  ##matrix prepareation
+  colname <- colnames(df)
+  colname <- data.frame(text=colname, x=c(1:length(colname)),colslider=colslider)
+  colnames(df) <- c(1:ncol(df))
+  
+  rowname <- rownames(df)
+  rowname <- data.frame(text=rowname, y=c(1:length(rowname)),rowslider=rowslider)
+  rownames(df) <- c(1:nrow(df))
+  
+  tiledata <- melt(as.matrix(df))
+  
+  ##heatmap is p1
+  p1 <- ggplot()+
+        geom_tile(data = tiledata, mapping = aes(x=Var2, y = Var1, fill=value))+
+        scale_x_continuous(expand=c(0,0))+ 
+        scale_y_continuous(expand=c(0,0))+
+        scale_fill_gradient2(low = colours[1],mid = colours[2],high = colours[3],midpoint = (max(tiledata$value)+min(tiledata$value))/2)+
+        guides(fill=F)+
+        theme_ggh()
+  #p1
+
+  ##colslider is cols
+  cols <- ggplot()+
+          geom_tile(data=colname,aes(x=x,y=0,fill=colslider))+
+          scale_x_continuous(expand=c(0,0))+ 
+          scale_y_continuous(expand=c(0,0))+
+          scale_fill_identity(guide = "legend")+
+          theme_ggh()
+  #cols
+  
+  ##rowslider is rows
+  rows <- ggplot()+
+          geom_tile(data=rowname,aes(x=0,y=y,fill=rowslider))+
+          scale_x_continuous(expand=c(0,0))+ 
+          scale_y_continuous(expand=c(0,0))+
+          scale_fill_identity(guide = "legend")+
+          theme_ggh()
+  rows
+  
+  ##col dendrogram if needed
+  if(ColV==T){
+    coldend <- as.dendrogram(clst_x)
+    #plot(coldend)
+    coldend <- segment(dendro_data(coldend))
+    cold <- ggplot()+
+            geom_segment(data=coldend,aes(x=x, y=y, xend=xend, yend=yend))+
+            scale_x_continuous(expand=c(0,0),limits = c(0.5,max(coldend$xend)+0.5))+ 
+            scale_y_continuous(expand=c(0,0))+
+            theme_ggh()
+    #cold
+  }else{
+    cold <- blank_grid
+  }
+  
+  ##row dendrogram if needed
+  if(RowV==T){
+    rowdend <- as.dendrogram(clst_y)
+    #plot(rowdend)
+    rowdend <- segment(dendro_data(rowdend))
+    rowd <- ggplot()+
+            geom_segment(data = rowdend,aes(x=x, y=y, xend=xend, yend=yend))+
+            scale_x_continuous(expand=c(0,0),limits = c(0.5,max(rowdend$xend)+0.5))+ 
+            scale_y_reverse(expand=c(0,0))+
+            theme_ggh()+
+            coord_flip()
+    #rowd
+  }else{
+    rowd <- blank_grid
+  }
+  
+  ##key histgram(density plot)
+  key_hist <- hist(tiledata$value,breaks = 50,plot = F)
+  max_hist <- max(key_hist$density)
+  key_density <- data.frame(range=seq(min(tiledata$value)-1, max(tiledata$value)+1, 0.02))
+  key_density_range <- density(tiledata$value)
+  
+  key <-  ggplot()+
+          geom_tile(data = key_density, 
+                    mapping = aes(x = range, y=max_hist/2*1.2,fill=range,width=0.02, height=max_hist*1.2),
+                    show.legend = F)+
+          scale_fill_gradient2(low = colours[1],mid = colours[2],high = colours[3],
+                               midpoint = (max(tiledata$value)+min(tiledata$value))/2,
+                               limits=c(max(tiledata$value),min(tiledata$value)),
+                               oob=squish)+
+          scale_x_continuous(expand=c(0,0))+
+          scale_y_continuous(expand=c(0,0))+
+          geom_histogram(data = tiledata,mapping = aes(x=value,y=..density..),
+                         alpha=0.8, binwidth = (max(tiledata$value)-min(tiledata$value))/50)+
+          guides(fill=F,colour=F)+xlab("")+ylab("")+
+          theme_classic()+
+          theme(text = element_text(family = "Arial",size=font.size,lineheight = 0.7),
+                axis.text.x =  element_text(family = "Arial",size=key.axis.fontsize),
+                axis.text.y =  element_text(family = "Arial",size=key.axis.fontsize),
+                plot.margin = unit(c(0,0,-0.02,-0.015),"native"))
+  #key
+  
+  ##colnames
+  if(colname_label==T){
+    colname_label <- ggplot()+
+                geom_text(data=colname,mapping = aes(x=x,y=0, label=text,angle=colangle),
+                          size=3,hjust=0)+
+                scale_x_continuous(expand=c(0,0),limits = c(min(colname$x)-0.5, max(colname$x)+0.5))+
+                scale_y_continuous(expand=c(0,0),limits = c(0,1))+
+                theme_ggh()
+    colname_table <- ggplot_gtable(ggplot_build(colname_label))
+    colname_table$layout$clip[colname_table$layout$name=="panel"] <- "off"
+    #class(colname_table)
+    #colname_label
+  }else{
+    colname_label <- blank_grid
+    colname_table <- blank_grid
+  }
+  
+  ##rownames
+  if(rowname_label==T){
+    rowname_label <- ggplot()+
+                geom_text(data = rowname,mapping = aes(x=0,y=y, label=text,angle=rowangle),
+                          size=3,hjust=0)+
+                scale_x_continuous(expand=c(0,0),limits = c(0,0.05))+
+                scale_y_continuous(expand=c(0,0),limits = c(min(rowname$y)-0.5, max(rowname$y)+0.5))+
+                theme_ggh()
+    rowname_table <- ggplot_gtable(ggplot_build(rowname_label))
+    rowname_table$layout$clip[rowname_table$layout$name=="panel"] <- "off"
+    #rowname_label
+  }else{
+    rowname_label <- blank_grid
+    rowname_table <- blank_grid
+  }
+  
+  if(!is.null(add_p)){
+    add <- add_p
+  }else{
+    add <- blank_grid
+  }
+  !is.null(add_p)
+  #add <- b1
+
+  ##layout
+  if(is.null(lmat) | is.null(lwid) | is.null(lhei)){
+    lmat <- rbind(c(7,7,1,1,1,1),
+                  c(7,7,5,1,1,1),
+                  c(7,7,3,1,1,1),
+                  c(6,4,2,9,10,1),
+                  c(1,1,8,1,1,1))
+    lwid <- c(0.2, 0.1, 1, 0.1,0.5,0.01)
+    lhei <- c(0.1,0.2,0.1,2,0.01)
+  }
+
+
+  grid_p <- grid.arrange(blank_grid,#1
+               p1,#2
+               cols,#3
+               rows,#4
+               cold,#5
+               rowd,#6
+               key,#7
+               colname_table,#8
+               rowname_table,#9
+               add,#10
+               layout_matrix=lmat,heights=lhei, widths=lwid,
+               top=textGrob(main, gp=gpar(fontsize=20,fontfamily="Arial")))
+  grid.draw(grid_p)
+  result <- list()
+  result[["plot_data"]] <- grid_p
+  if(ColV==T){
+    result <- c(result, clst_x=list(clst_x))
+  }
+  
+  if(RowV==T){
+    result <- c(result, clst_y=list(clst_y))
+  }
+  
+  return(result)
+}
+
+#ggheat(df = h,ColV = T,RowV = F,colname_label = T,rowname_label = F,colslider = colslider, rowslider=rowlabel,colangle = 90,rowangle=0,key.axis.fontsize = 10,main="demo_hist",add_p = b1)
+
+gh_result <- ggheat(df = h,
+       ColV = T,RowV = F,
+       colname_label = F,
+       rowname_label = F,
+       colslider = clst_result$V2,rowslider=rowlabel,
+       colangle = 45,rowangle=45,
+       key.axis.fontsize = 10,main="TCGA sample clustering",
+       add_p = b1,
+       lmat = rbind(c(7,7,1,1,1,1),
+                    c(7,7,5,1,1,1),
+                    c(7,7,3,1,1,1),
+                    c(6,4,2,9,10,1),
+                    c(1,1,8,1,1,1)),
+      lwid = c(0.2, 0.1, 1, 0.01,0.5,0.01),
+      lhei = c(0.1,0.2,0.1,2,0.01)
+      )
+grid.draw(gh_result$plot_data)
+
+ggsave(filename = "ggheat0.tiff",plot = gh_result$plot_data,dpi = 300,width = unit(6,"cm"),height = unit(5,"cm"))
+
+gh1 <- ggheat(df = h,
+       ColV = T,RowV = F,
+       colname_label = F,
+       rowname_label = F,
+       colslider = clst_result$V2,rowslider=rowlabel,
+       colangle = 45,rowangle=45,
+       key.axis.fontsize = 10,main="",
+       add_p = b1,
+       lmat = rbind(c(1,1,1,7,7,1),
+                    c(1,1,5,7,7,1),
+                    c(1,1,3,7,7,1),
+                    c(6,4,2,9,10,1),
+                    c(1,1,8,1,1,1)),
+      lwid = c(0.01, 0.05, 1.8, 0.01,1,0.01),
+      lhei = c(0.2,0.3,0.1,2,0.01))
+
+#rm(gh1)
+
+
+ggsave(filename = "ggheat1.tiff",plot = gh1$plot_data,dpi = 300,width = unit(6,"cm"),height = unit(5,"cm"))
+
+
+sample_clst_res <-  cutree(gh1$clst_x,k = 2)
+sample_clst_res <- cbind(sample_clst_res, ifelse(sample_clst_res==1, yes = "pink",no = "cyan"))
+summary(sample_clst_res)
+sample_clst_res <- as.data.frame(sample_clst_res)
+sample_clst_res$V2 <- as.character(sample_clst_res$V2)
+
+sample_clst_res$original_tissue <- substr(rownames(sample_clst_res),1,12)
+HCC_samplelist <- sample_clst_res[sample_clst_res$sample_clst_res==1,]$original_tissue
+HCC_samplelist <- sample(HCC_samplelist,size = 20,replace = F)
+HCC_samplelist
+Unkown_samplelist <- sample_clst_res[sample_clst_res$sample_clst_res==2,]$original_tissue
+Unkown_samplelist
+```
+
+
+```{r}
+one2multi_detect <- function(target_vector, search_vector){
+  require("stringr")
+  result_bool_vector <- c()
+  for (i in c(1:length(target_vector))){
+    bool_j <- c()
+    for (j in c(1:length(search_vector))){
+      bool_j <- c(bool_j,
+                  str_detect(string = target_vector[i],
+                             pattern = search_vector[j]))
+    }
+    bool_i <- sum(bool_j != 0)
+    result_bool_vector <- c(result_bool_vector, as.logical(bool_i))
+  }
+  return(result_bool_vector)
+} 
+
+
+```
+
+
+#get svs
+```{r}
+#biocLite('GenomicDataCommons')
+require("GenomicDataCommons")
+require(magrittr)
+#GenomicDataCommons::status()
+
+gdc_q <- query(entity = "files",legacy = T)
+gdc_q <- filter(x = gdc_q,expr =  ~ cases.primary_site=="Liver" &
+                data_category == "Clinical" &
+                (data_type == "Tissue slide image" |data_type == "Pathology report"))
+
+manifest1 <- manifest(gdc_q)
+
+filelists <- manifest1$filename
+idlists <- manifest1$id
+HCC_filelist <- filelists[one2multi_detect(target_vector = filelists,search_vector = HCC_samplelist)]
+HCC_idlist <- idlists[one2multi_detect(target_vector = filelists,search_vector = HCC_samplelist)]
+Unkown_filelist <- filelists[one2multi_detect(target_vector = filelists,search_vector = Unkown_samplelist)]
+Unkown_idlist <- idlists[one2multi_detect(target_vector = filelists,search_vector = Unkown_samplelist)]
+
+```
+
+```{r}
+# #dir.create(path = "./unkowns")
+# destdir <- "./unkowns/"
+# gdcdata(Unkown_idlist,destination_dir = destdir)
+# 
+# destdir2 <- "./unkowns2/"
+# gdcdata(Unkown_idlist,destination_dir = destdir2)
+```
+
+
+```{r}
+#dir.create(path="./hccs")
+#destdir_hhc <- "./hccs/"
+#gdcdata(uuids = HCC_idlist,destination_dir = destdir_hhc)
+```
+
+
+```{r}
+all_major <- sample_clst_res[sample_clst_res$sample_clst_res==1,]$original_tissue
+
+all_major_csv <- data.frame(id=all_major)
+write.table(x = all_major_csv,file = "all_major.csv", sep = ",",row.names = T, col.names = NA)
+
+
+all_major_df <- data.frame(id=idlists[one2multi_detect(target_vector = filelists,
+                                              search_vector = all_major)],
+                           file=filelists[one2multi_detect(target_vector = filelists,
+                                              search_vector = all_major)],stringsAsFactors = F)
+
+#dir.create(path="./all_major")
+destdir_allm <- "./all_major/"
+# 
+# for (i in 1:length(all_major_df$id)){
+#   gdcdata(uuids = all_major_df$id[i],destination_dir = destdir_allm,overwrite = F)
+#   print(all_major_patho[i])
+# }
+# 
+all_major_df <- all_major_df[!file.exists(paste("./all_major/",all_major_df$file,sep = "")),]
+```
+
+
+```{r}
+all_minor <- sample_clst_res[sample_clst_res$sample_clst_res==2,]$original_tissue
+all_minor_csv <- data.frame(id=all_minor)
+write.table(x=all_minor, file="all_minor.csv", sep=",",row.names = T, col.names = NA)
+```
+
+
+##cluster and clinical data
+get cinical data
+```{r}
+# downloader::download(url = "http://gdac.broadinstitute.org/runs/stddata__2016_01_28/data/LIHC/20160128/gdac.broadinstitute.org_LIHC.Merge_Clinical.Level_1.2016012800.0.0.tar.gz",destfile="gdac.broadinstitute.org_LIHC.Merge_Clinical.Level_1.2016012800.0.0.tar.gz")
+# R.utils::gunzip("./gdac.broadinstitute.org_LIHC.Merge_Clinical.Level_1.2016012800.0.0.tar.gz")
+# untar("./gdac.broadinstitute.org_LIHC.Merge_Clinical.Level_1.2016012800.0.0.tar")
+
+clin <- read.table(file = "./gdac.broadinstitute.org_LIHC.Merge_Clinical.Level_1.2016012800.0.0/LIHC.clin.merged.txt",header = F,sep = "\t",stringsAsFactors = F,quote = "")
+```
+
+
+```{r}
+sum(duplicated(clin$V1))
+rownames(clin) <- clin$V1
+clin <- clin[,-1]
+colnames(clin) <- as.vector(clin[rownames(clin)=="patient.bcr_patient_barcode",])
+colnames(clin) <- toupper(colnames(clin))
+clin <- t(clin)
+
+
+clst4merge <- clst_result
+clst4merge$sampe_tag <- rownames(clst4merge)
+rownames(clst4merge) <- substr(rownames(clst4merge),start = 1, stop = 12)
+
+clst_clin <- merge(clst4merge, clin, by=0, sort = F)
+
+sum(clst_clin$Row.names %in% c(HCC_samplelist, Unkown_samplelist))
+clst_clin <- clst_clin[clst_clin$Row.names %in% c(HCC_samplelist, Unkown_samplelist),]
+
+require(tidyverse)
+
+
+cc <- clst_clin %>%
+      sapply(., FUN = function(x){sum(is.na(x))}) == 0
+cc <- clst_clin[,cc]
+
+cc <- cc[cc$Row.names %in% c(HCC_samplelist, Unkown_samplelist),]
+cc$clinical_cluster <- ifelse(cc$clst_result==1, "major","minor")
+
+
+write.table(cc, "clinical.csv",sep = ",",row.names = T, col.names = NA)
+require(stringr)
+
+
+```
+
+```{r}
+require(dplyr)
+clst_clin2 <- merge(clst4merge, clin, by=0, sort = F)
+
+write.table(clst_clin2, "clst_clin2.csv", sep=",",row.names = T, col.names = NA)
+
+name_tag <- clst_clin2 %>%
+  sapply(., FUN = function(x){sum(!is.na(x))}) != 0
+
+df <- clst_clin2[,name_tag]
+colnames(df)
+
+table(df$clst_result, df$patient.age_at_initial_pathologic_diagnosis)
+plot(df$clst_result, df$patient.age_at_initial_pathologic_diagnosis)
+```
+
+
+##sessioninfo
+```{r}
+sessionInfo()
+Sys.time()
+Sys.info()
+```
+
+##function for save attached pkgs from sessioninfo
+```{r}
+ses2ris <- function(dir="./ses_ris", ver=T){
+  require("magrittr")
+  require("stringr")
+  
+  if(!file.exists(dir)){
+    dir.create(dir)
+  }
+  
+  end_out <- function(pac, ver, dir){
+    pac_ver <- packageVersion(pac)
+  
+    if(ver){
+      out_file <- paste(pac, "_", pac_ver, ".ris",sep = "")
+    }else{
+      out_file <- paste(pac, ".ris",sep = "")
+    }
+    print(out_file)
+  
+    ##pac_cit <- utils:::print.bibentry(citation(pac), style = "Bibtex")
+    pac_cit <- print(citation(pac),bibtex=TRUE)
+  
+    double_q <- "\""
+    if(!is.na(pac_cit[1]$title)){
+      pac_cit[1]$title <- str_replace(pac_cit[1]$title, "---", ":")
+      pac_cit[1]$title <- str_replace_all(pac_cit[1]$title, "\\'", double_q)
+    }
+
+    capture.output(toBibtex(pac_cit),file = "tmp.bib")
+    
+    sys_code <- paste("bib2xml tmp.bib | xml2ris  > ", dir, "/", out_file, sep="")
+    print(sys_code)
+    system(sys_code)
+  }
+  
+  pacs <- sessionInfo() %>%
+    .$otherPkgs %>%
+    names(.)
+  print(pacs)
+  sapply(X = pacs, FUN = end_out, ver=ver, dir=dir)
+  
+  file.remove("./tmp.bib")
+}
+
+
+#ses2ris()
+```
+
+```{r}
+sessionInfo()
+ses2ris()
+```

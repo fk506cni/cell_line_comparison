@@ -1,0 +1,24 @@
+﻿Cell line primary name,Gender,Ethnicity,Country,age,Description in articles,Cluster,viral_status
+Alexander cells,M,Shangaan,Mozambique,24,hepatoma,A,HBV+
+C3A,M,Caucasian,Argentina,15,differentiated HCC,A,non
+Hep 3B2.1-7,M,Black,US,8,differentiated HCC,A,HBV+
+Hep G2,M,Caucasian,Argentina,15,differentiated HCC,A,non
+huH-1,M,Japanese,Japan,53,Hepatoma,A,HBV+
+HuH-6,M,Japanese,Japan,infant,HB,A,non
+HuH-7,M,Japanese,Japan,57,well-differentiated HCC,A,non
+JHH-5,M,NA,Japan,50,HCC,A,non
+JHH-7,M,NA,Japan,53,HCC,A,HBV+
+PLC-PRF-5,M,Shangaan,Mozambique,24,hepatoma,A,HBV+
+HLE,M,NA,Japan,68,undifferentiated HCC,B,non
+HLF,M,NA,Japan,68,undifferentiated HCC,B,non
+JHH-2,M,NA,Japan,57,HCC,B,non
+JHH-4,M,NA,Japan,51,HCC,B,non
+Li-7,M,NA,Japan,45,thick trabecular HCC,B,non
+SNU-182,M,Korean,Korea,24,"HCC, grade III/IV",B,HBV+
+SNU-387,F,Korean,Korea,41,"HCC, grade III-IV/IV",B,HBV+
+SNU-423,M,Korean,Korea,40,"HCC, grade III/IV",B,HBV+
+SNU-449,M,Korean,Korea,52,"HCC, grade II-III/IV",B,HVB+
+SNU-475,M,Korean,Korea,43,"HCC, grade III-IV/IV",B,HVB+
+SNU-761,M,Korean,Korea,49,"HCC, grade III/IV",B,HVB+
+SNU-878,F,Korean,Korea,54,"HCC, grade II III/IV",B,HVB+
+SNU-886,M,Korean,Korea,57,"HCC, grade II IV/IV",B,HVB+

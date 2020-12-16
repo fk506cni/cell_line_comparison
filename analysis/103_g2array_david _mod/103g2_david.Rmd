@@ -1,0 +1,135 @@
+---
+title: "103g2array_david"
+author: "fkeita"
+date: "2017/3/16"
+output: html_document
+---
+
+General setup
+```{r setup}
+knitr::opts_chunk$set(echo = TRUE, cache = TRUE,cache.lazy = FALSE)
+source("http://bioconductor.org/biocLite.R")
+#biocLite("RDAVIDWebService")
+#install.packages("rJava","http://rforge.net/",type="source")
+#install.packages("rJava")
+#require("rJava")
+Sys.setenv(JAVA_HOME = '/usr/lib/jvm/java-8-oracle/')
+require("RDAVIDWebService")
+#require("affy")
+#require("R.utils")
+#require("stringr")
+#require("gplots")
+#require("MASS")
+#require("org.Hs.eg.db")
+#library("affy")
+#require("magrittr")
+#require("ggplot2")
+#require("ggdendro")
+#require("limma")
+#require("RTCGAToolbox")
+#require("survival")
+
+```
+
+##GO and annotation  
+starting materials from  87_2garray_re
+```{r}
+g2 <- read.table(file = "2Garray.annot_2.txt",header = T,sep = "\t",fill = T,check.names = F,row.names = 1)
+g2 <- g2[g2$q.value < 0.0001,]
+g2 <- g2[!g2$Gene.Symbol =="---",]
+```
+
+##A genes
+```{r}
+##number of A gene probe set id
+a_genes <- g2[g2$gene_cluster =="A",]
+dim(a_genes)[1]
+write.table(x = a_genes,file = "a_genes.csv",sep = ",",row.names = T,col.names = NA)
+
+##number of unique A genes
+a_genes <- a_genes[!duplicated(a_genes$Gene.Symbol),]
+dim(a_genes)[1]
+```
+
+##B genes
+```{r}
+##number of B gene probe set id
+b_genes <- g2[g2$gene_cluster =="B",]
+dim(b_genes)[1]
+write.table(x = b_genes,file = "b_genes.csv",sep = ",",row.names = T,col.names = NA)
+##number of unique A genes
+b_genes <- b_genes[!duplicated(b_genes$Gene.Symbol),]
+dim(b_genes)[1]
+```
+
+
+##DAVID
+```{r}
+Sys.setenv(JAVA_HOME = '/usr/lib/jvm/java-8-oracle/')
+
+david <- DAVIDWebService$new(email="fkeita@kuhp.kyoto-u.ac.jp",url="https://david.ncifcrf.gov/webservice/services/DAVIDWebService.DAVIDWebServiceHttpSoap12Endpoint/")
+
+david
+```
+
+
+```{r}
+data(demoList1)
+demoList1
+class(demoList1)
+class(as.character(a_genes$Row.names))
+mode(demoList1)
+result<-addList(david, demoList1,
+                 idType="AFFYMETRIX_3PRIME_IVT_ID",
+                 listName="demoList1", listType="Gene")
+
+
+result
+david
+
+
+result2 <- addList(david,as.character(a_genes$Row.names),
+                   idType="AFFYMETRIX_3PRIME_IVT_ID",
+                   listName="demoList1", listType="Gene")
+
+res <- getGeneCategoriesReport(object = david)
+res <- getAnnotationSummary(david)
+res <- getFunctionalAnnotationChart(david)
+res
+
+summary(res)
+class(res)
+david
+result2
+
+res3 <- getGeneCategoriesReport(object = david)
+
+result3 <- DAVIDFunctionalAnnotationTable(object = as.character(a_genes$Row.names))
+
+fileName<-system.file("files/termClusterReport1.tab.tar.gz",package="RDAVIDWebService")
+untar(fileName)
+fileName
+temp <- untar(fileName, list=TRUE)
+temp
+termCluster<-DAVIDTermCluster(untar(fileName, list=TRUE))
+
+summary(termCluster)
+termCluster<-DAVIDTermCluster(temp)
+termCluster
+k
+str(termCluster)
+```
+
+
+##a_genes annotation
+```{r}
+a_annot <- read.table(file = "./chart_1B01FCFD40661490063916571.txt",header = T,sep = "\t",stringsAsFactors = F,check.names = F)
+```
+
+
+
+##sessioninfo
+```{r}
+sessionInfo()
+```
+

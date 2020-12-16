@@ -1,0 +1,109 @@
+---
+title: "145cell_line_establish_report"
+author: "fkeita"
+date: "2017/12/14"
+output: html_document
+---
+
+```{r setup}
+knitr::opts_chunk$set(echo = TRUE, cache = TRUE,cache.lazy = FALSE)
+source("http://bioconductor.org/biocLite.R")
+#require("R.utils")
+require("stringr")
+require("MASS")
+require("magrittr")
+require("dplyr")
+require("ggplot2")
+
+
+#install.packages("ggsignif")
+require(ggsignif)
+
+require("extrafont")
+loadfonts(quiet = T)
+```
+
+
+```{r}
+ggsave2 <- function(plot, wid=9, hei=9){
+  plot_name <- deparse(substitute(plot))
+  file_name <- paste(plot_name, ".png", sep = "",collapse = "")
+  ggsave(filename = file_name,plot = plot,device = "png",width = wid, height = hei,dpi = 300,units = "cm")
+}
+```
+##data
+```{r}
+d <- read.csv(file = "./table_x4_LiverCancerCLdetails.csv", stringsAsFactors = F)
+```
+
+```{r}
+data <- d %>%
+  as.data.frame() %>%
+  dplyr::select(age, Cluster) %>%
+  dplyr::mutate(age=ifelse(age=="infant", 0, age)) %>%
+  dplyr::mutate(age=as.numeric(age))
+
+  
+```
+
+```{r}
+plt <- ggplot()+
+  geom_boxplot(data = data,mapping = aes(x=Cluster, y=age),outlier.colour = NA)+
+  geom_jitter(data = data,mapping = aes(x=Cluster, y=age), colour="red")+
+  geom_signif(data = data,mapping = aes(x=Cluster, y=age),
+              comparisons = list(c("A","B")),manual = F,test = "t.test")+  
+  xlab("Sample cluster")+ylab("age")+
+  theme_classic(base_size = 14,base_family = "Arial")+
+  theme(axis.text=element_text(size=12),
+        axis.title=element_text(size=14,face="bold"))
+
+plt
+
+  ggsave(filename = "cl_age.tiff",plot = plt, dpi = 300,width = unit(6, "cm"),height = unit(5,"cm"))
+
+```
+
+
+```{r}
+
+
+clst_age_cmp <- ggplot()+
+  geom_boxplot(data = data,mapping = aes(x=Cluster, y=age),outlier.colour = NA)+
+  geom_jitter(data = data,mapping = aes(x=Cluster, y=age), colour="red", height = 0, width = 0.3)+
+  geom_signif(data = data,mapping = aes(x=Cluster, y=age),
+              comparisons = list(c("A","B")),map_signif_level = T, test = "t.test")+  
+  xlab("Sample cluster")+ylab("age")+
+  theme_classic(base_size = 14,base_family = "Arial")+
+  theme(axis.text=element_text(size=12),
+        axis.title=element_text(size=14,face="bold"))+
+  scale_y_continuous(limits = c(-1, 80), expand = c(0,0))
+
+clst_age_cmp
+
+
+ggsave2(clst_age_cmp)
+```
+
+
+```{r}
+a_age <- data[data$Cluster=="A",]$age
+b_age <- data[data$Cluster=="B",]$age
+
+var.test(a_age, b_age)
+shapiro.test(a_age)
+shapiro.test(b_age)
+
+t.test(a_age, b_age,var.equal = T)
+t.test(a_age, b_age, var.equal = F)
+wilcox.test(a_age,b_age)
+lawstat::brunner.munzel.test(a_age, b_age)
+ks.test(a_age, b_age)
+```
+
+##sessioninfo
+```{r}
+sessionInfo()
+Sys.time()
+Sys.info()
+```
+

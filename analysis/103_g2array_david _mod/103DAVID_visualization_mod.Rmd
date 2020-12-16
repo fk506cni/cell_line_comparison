@@ -1,0 +1,380 @@
+---
+title: "103DAVID_visualization"
+author: "fkeita"
+date: "2017/5/20"
+output: html_document
+---
+```{r message=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = TRUE,cache.lazy = FALSE, echo=TRUE)
+source("http://bioconductor.org/biocLite.R")
+require("stringr")
+require("MASS")
+require("ggplot2")
+require(dplyr)
+#biocLite("clusterProfiler")
+#biocLite("RDAVIDWebService")
+require(clusterProfiler)
+#require(RDAVIDWebService)
+
+q_value_cuttoff <- 0.0001
+fkac <- "fkeita@kuhp.kyoto-u.ac.jp"
+
+require(extrafont)
+loadfonts(quiet = T)
+```
+
+##modification of function
+```{r}
+theme_dose_mod <- function(font.size=14) {
+    theme_classic() +
+    theme(axis.text.x = element_text(colour = "black",
+    size = font.size, vjust =1 ),
+    axis.text.y = element_text(colour = "black",
+    size = font.size, hjust =1 ),
+    axis.title = element_text(margin=margin(10, 5, 0, 0),
+    color = "black",
+    size = font.size),
+    axis.title.y = element_text(angle=90),
+    plot.title = element_text(family = "Arial",size=font.size+2),
+    plot.margin = unit(c(1.5, 1.5, 1, 6), "lines"),
+    panel.grid = element_blank(),
+    text = element_text(family = "Arial",size=font.size,lineheight = 0.7)
+    )
+}
+
+theme_Publication <- function(base_size=14, base_family="Arial") {
+      library(grid)
+      library(ggthemes)
+      (theme_foundation(base_size=base_size, base_family=base_family)
+       + theme(plot.title = element_text(face = "bold",
+                                         size = rel(1.2), hjust = 0.5),
+               text = element_text(),
+               panel.background = element_rect(colour = NA),
+               plot.background = element_rect(colour = NA),
+               panel.border = element_rect(colour = NA),
+               axis.title = element_text(face = "bold",size = rel(1)),
+               axis.title.y = element_text(angle=90,vjust =2),
+               axis.title.x = element_text(vjust = -0.2),
+               axis.text = element_text(), 
+               axis.line = element_line(colour="black"),
+               axis.ticks = element_line(),
+               panel.grid.major = element_line(colour="#f0f0f0"),
+               panel.grid.minor = element_blank(),
+               legend.key = element_rect(colour = NA),
+               legend.position = "bottom",
+               legend.direction = "horizontal",
+               legend.key.size= unit(0.2, "cm"),
+               legend.margin = unit(0, "cm"),
+               legend.title = element_text(face="italic"),
+               plot.margin=unit(c(10,5,5,5),"mm"),
+               strip.background=element_rect(colour="#f0f0f0",fill="#f0f0f0"),
+               strip.text = element_text(face="bold")
+          ))
+      
+}
+
+
+
+barplot.enrichResult <- function(height, x="Count", colorBy='pvalue', showCategory=5, font.size=12, title="",low_col="blue",high_col="red",ylm=c(0,20), ...) {
+    ## use *height* to satisy barplot generic definition
+    ## actually here is an enrichResult object.
+    object <- height
+
+    colorBy <- match.arg(colorBy, c("pvalue", "p.adjust", "qvalue","Count"))
+    if (x == "geneRatio" || x == "GeneRatio") {
+        x <- "GeneRatio"
+    }
+    else if (x == "count" || x == "Count") {
+        x <- "Count"
+    }
+
+    Description <- Count <- NULL # to satisfy codetools
+    df <- fortify(object, showCategory=showCategory, by=x, ...)
+    df[x][[1]] <- -log(as.numeric(df[x][[1]]))
+
+    p <- ggplot(df, aes_string(x = "Description", y = x))
+    p <- p +
+        geom_bar(stat = "identity") +
+        scale_y_continuous(expand = c(0,0),limits = ylm)+
+        geom_hline(yintercept = -log(0.05)) +
+        ylab(paste("-log(",x,")",sep = ""))+coord_flip() + theme_dose(font.size)
+
+    if("pvalue" %in% colnames(p$data)) {
+        pvalue <- NULL # to satisfy codetools
+        p <- p + aes_string(fill=colorBy) +
+            scale_fill_continuous(low=low_col, high=high_col)
+    } else {
+        p <- p+aes(fill=Description) +
+            theme(legend.position="none")
+    }
+    p <- p + ggtitle(title) + xlab("")
+    return(p)
+}
+
+
+```
+
+##newliner
+```{r}
+newliner <- function(chr,sep=" ",div=5){
+    chr <- as.character(chr)
+    separator <- sep
+    chr_vector <- unlist(strsplit(x = chr,split = separator))
+    sentence <- chr_vector
+    length(chr_vector)
+    c(1:length(chr_vector))
+    for (i in c(1:length(chr_vector))){
+        if(i/div == round(i/div)){
+            sentence <- append(x = sentence,values = "\n",after = 2*i-1)    
+        }
+        else{
+            sentence <- append(x = sentence,values = " ",after = 2*i-1)
+        }
+    }
+    sentence <- sentence[-length(sentence)]
+    sentence <- paste(sentence,collapse = "")
+    sentence
+    return(sentence)
+}
+```
+
+
+##read_
+```{r}
+annot <- read.table(file = "2Garray.annot_2.txt",header = T,sep = "\t",stringsAsFactors = F)
+deg <- annot[annot$q.value < q_value_cuttoff,]
+
+deg_out <- deg
+colnames(deg_out)[length(deg_out)] <- "gene_class"
+write.table(deg_out, file = "DEGprofile.tsv",sep = "\t",row.names = T, col.names = NA)
+
+a_set <- deg[deg$gene_cluster=="A",]$Row.names
+a_set
+length(a_set)
+
+require(dplyr)
+a_gene_names <- annot %>%
+    filter(q.value < q_value_cuttoff) %>%
+    filter(gene_cluster == "A") %>%
+    filter(!duplicated(Gene.Symbol))
+
+a_gene_names$Gene.Symbol
+length(a_gene_names$Gene.Symbol)
+
+
+b_set <- deg[deg$gene_cluster=="B",]$Row.names
+length(b_set)
+
+b_gene_names <- annot %>%
+    filter(q.value < q_value_cuttoff) %>%
+    filter(gene_cluster == "B") %>%
+    filter(!duplicated(Gene.Symbol))
+b_gene_names$Gene.Symbol
+length(b_gene_names$Gene.Symbol)
+
+```
+
+##a set
+```{r}
+david_a <- enrichDAVID(gene = a_set,idType ="AFFYMETRIX_3PRIME_IVT_ID",listType = "Gene",annotation = "GOTERM_BP_FAT",david.user = fkac,pAdjustMethod = "BH",minGSSize = 3,pvalueCutoff = 0.2,maxGSSize = 500)
+write.table(david_a@result,"david_Agenes.csv",sep = ",",col.names = NA, row.names = T)
+david_a@result$Description <-sapply(david_a@result$Description,newliner)
+
+a_result <- barplot.enrichResult(david_a,showCategory = 10,drop=T,colorBy = "Count",title = "",x = "qvalue",low_col = "pink",high_col = "red",ylm = c(0,16),font.size = 14)
+
+a_result
+
+ggsave(filename = "david_A.tiff",plot = a_result,dpi = 300,width = unit(9, "cm"),height = unit(5,"cm"))
+```
+
+##b set
+```{r}
+david_b <- enrichDAVID(gene = b_set,idType ="AFFYMETRIX_3PRIME_IVT_ID",listType = "Gene",annotation = "GOTERM_BP_FAT",david.user = fkac,pAdjustMethod = "BH",minGSSize = 3,pvalueCutoff = 0.2,maxGSSize = 500)
+
+write.table(david_b@result,"david_Bgenes.csv",sep = ",",col.names = NA, row.names = T)
+
+david_b@result$Description <-sapply(david_b@result$Description,newliner)
+
+#david@result$Description[10] <- "regulation of cellular response to transforming\ngrowth factor beta stimulus"
+
+barplot.enrichResult(david_b,showCategory = 10,drop=T,colorBy = "Count",title = "",x = "qvalue",low_col = "cyan",high_col = "blue",ylm = c(0,16),font.size = 14)
+
+b_result <- barplot.enrichResult(david_b,showCategory = 10,drop=T,colorBy = "Count",title = "",x = "qvalue",low_col = "cyan",high_col = "blue",ylm = c(0,16),font.size = 14)
+
+ggsave(filename = "david_B.tiff",plot = b_result,dpi = 300,width = unit(9, "cm"),height = unit(5,"cm"))
+
+
+```
+
+```{r}
+#comments
+comm <- list()
+comm[[1]] <- c(1, 0.01, 0.97, "a", 16) %>%
+    as.character()
+comm[[2]] <- c(2, 0.01, 0.97, "b", 16) %>%
+    as.character()
+
+comments <- comm
+```
+
+
+
+```{r}
+
+showCategory <- 10
+ylim <- c(0,16)
+font.size <- 18
+low_col1 <- "pink"
+high_col1 <- "red"
+low_col2 <- "cyan"
+high_col2 <- "blue"
+font_family <- "Arial"
+bar2plot <- function(enrich1, enrich2, showCategory=5, font.size=12,x="Count",colorBy="qvalue",
+                     title="",low_col1="pink",high_col1="red",low_col2="cyan",high_col2="blue",ylm=c(0,20), comments=NULL, ...){
+    ##devtools::install_github("baptiste/gtable")
+    library(gtable)
+    require(gridExtra)
+    require(grid)
+    gtgb <- function(p) ggplot_gtable(ggplot_build(p))
+    gpl <- function(gt) grid::grid.draw(gt)
+    
+    
+    colorBy <- match.arg(colorBy, c("pvalue", "p.adjust", "qvalue","Count"))
+    if (x == "geneRatio" || x == "GeneRatio") {
+        x <- "GeneRatio"
+    }
+    else if (x == "count" || x == "Count") {
+        x <- "Count"
+    }
+    
+    require(dplyr)
+    
+##    enrich1 <- david_a
+ #   enrich2 <- david_b
+#
+ #   colorBy
+    df1 <- fortify(enrich1, showCategory = showCategory, by=x) %>%
+        mutate(logvar = .[[colorBy]]) %>%
+        mutate(logvar = -log(as.numeric(logvar))) %>%
+        mutate(fillvar = .[[x]])
+    
+
+    df2 <- fortify(enrich2, showCategory= showCategory, by=x) %>%
+        mutate(logvar = .[[colorBy]]) %>%
+        mutate(logvar = -log(as.numeric(logvar))) %>%
+        mutate(fillvar = .[[x]])
+    
+    p1 <- ggplot() +
+        geom_bar(stat = "identity",data = df1,mapping = aes(x=Description, y=logvar,fill=fillvar)) +
+        geom_hline(yintercept = -log(0.05)) +
+        scale_y_continuous(expand = c(0,0),limits = ylim)+
+        ylab("")+xlab("")+labs(fill=x)+
+        coord_flip() + 
+        scale_fill_continuous(low=low_col1, high=high_col1) +
+        theme_dose_mod()+
+        theme(plot.margin = margin(0.2,0,0.3,0, "line"))
+
+    p1
+
+    
+    p2 <- ggplot() +
+        geom_bar(stat = "identity",data = df2,mapping = aes(x=Description, y=logvar,fill=fillvar)) +
+        geom_hline(yintercept = -log(0.05)) +
+        scale_y_continuous(expand = c(0,0),limits = ylim)+
+        ylab(paste("-log(",colorBy,")",sep = ""))+xlab("")+labs(fill=x)+
+        coord_flip() + 
+        scale_fill_continuous(low=low_col2, high=high_col2) +
+        theme_dose_mod()+
+        theme(plot.margin = margin(0,0,0,0, "line"))
+    
+    p2
+    
+    g1 <- ggplotGrob(p1)
+    g2 <- ggplotGrob(p2)
+    
+    g2$widths <- g1$widths
+    g2$heights <- g1$heights
+
+        ##addition comments
+    if(!is.null(comments)){
+        bg_layout <- g2$layout[g2$layout$name=="background",]
+        bg_t <- bg_layout$t
+        bg_l <- bg_layout$l
+        bg_b <- bg_layout$b
+        bg_r <- bg_layout$r
+        
+        i <- 1
+        
+        for(i in c(1:length(comments))){
+            tag_i <- as.integer(comments[[i]][1])
+            comment_i <- comments[[i]][c(2:5)]
+            gcommet_i <- grid.text(label = comment_i[3],
+                                   x = unit(comment_i[1], "npc"),
+                                   y = unit(comment_i[2], "npc"),
+                                   gp = gpar(fontsize=comment_i[4],
+                                             fontfamily=font.size+2))
+            if(tag_i ==1){
+                g1 <- gtable_add_grob(x = list(g1, g2)[[tag_i]],
+                                                grobs = gcommet_i,
+                                                t = bg_t,
+                                                l = bg_l,
+                                                b = bg_b,
+                                                r = bg_r,
+                                                name = paste("additiona_layer",i,sep ="_"))
+            }else if(tag_i ==2){
+                g2 <- gtable_add_grob(x = list(g1, g2)[[tag_i]],
+                                                grobs = gcommet_i,
+                                                t = bg_t,
+                                                l = bg_l,
+                                                b = bg_b,
+                                                r = bg_r,
+                                                name = paste("additiona_layer",i,sep ="_"))
+            }
+            print(i)
+        }
+    }
+    
+    p <- grid.arrange(g1, g2, nrow=2)
+    grid.newpage()
+    
+    grid.draw(p)
+
+    return(p)
+    
+}
+
+
+b2 <- bar2plot(enrich1 = david_a, enrich2 = david_b, showCategory = 10,font.size = 14,x = "Count",colorBy = "qvalue", comments = comments)
+
+
+ggsave(filename = "double_david.tiff",plot = b2, dpi = 300,width = unit(9, "cm"),height = unit(10, "cm"))
+
+
+```
+
+
+```{r}
+#0comments
+comm <- list()
+comm[[1]] <- c(1, 0.01, 0.97, "", 16) %>%
+    as.character()
+comm[[2]] <- c(2, 0.01, 0.97, "", 16) %>%
+    as.character()
+
+comment0 <- comm
+
+b2_0com <- bar2plot(enrich1 = david_a, enrich2 = david_b, showCategory = 10,font.size = 14,x = "Count",colorBy = "qvalue", comments = comment0)
+
+ggsave(filename = "double_david_0com.tiff",plot = b2_0com, dpi = 300,width = unit(9, "cm"),height = unit(10, "cm"))
+```
+
+
+##sessioninfo
+```{r}
+sessionInfo()
+Sys.time()
+Sys.info()
+```
+
+
+

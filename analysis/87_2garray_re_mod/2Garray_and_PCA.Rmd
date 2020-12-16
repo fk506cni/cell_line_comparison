@@ -1,0 +1,843 @@
+---
+title: "2Garray_and_PCA"
+author: "fkeita"
+date: "2017/1/10"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+General setup
+```{r setup}
+
+knitr::opts_chunk$set(echo = TRUE, cache = F,cache.lazy = FALSE)
+# source("http://bioconductor.org/biocLite.R")
+#require("affy")
+require("R.utils")
+require(tidyverse)
+# require("stringr")
+require("gplots")
+require("MASS")
+require("org.Hs.eg.db")
+library("affy")
+# require("magrittr")
+# require("ggplot2")
+require("ggdendro")
+require("limma")
+
+require("extrafont")
+require("extrafontdb")
+loadfonts(quiet = T, dev="win")
+```
+
+##re_output  
+2groups exp_array data
+and gene list in RMA normalization
+
+##read metadat  
+archive files were downloaded from CCLE portal.  
+https://portals.broadinstitute.org/ccle/home
+```{r read_meta}
+meta <- read.table(file = "CCLE_Expression.Arrays.sif_2012-10-18.txt",header = T,sep = "\t",stringsAsFactors = F)
+meta$Cell.line.primary.name <- str_replace_all(string = meta$Cell.line.primary.name,pattern = "\\/","_")
+
+meta$cell_name <- paste(meta$ID,rep("CEL",dim(meta)[1]),sep = ".")
+meta$cell_name_t <- paste(meta$Cell.line.primary.name,meta$Site.Primary,sep = "_")
+meta$cell_name_t <- paste(meta$cell_name_t,rep("CEL",dim(meta)[1]),sep = ".")
+
+meta$cell_name_t <- str_replace_all(meta$cell_name_t,pattern = "\\-",replacement ="")
+meta$cell_name_t <- str_replace_all(meta$cell_name_t,pattern = "\\/",replacement ="_")
+
+table(meta$Site.Primary)
+target_site <- "liver"
+meta_tg <- meta[meta$Site.Primary %in% target_site,]
+meta_untg <- meta[!meta$Site.Primary %in% target_site,]
+
+clstA <- c("JHH-7", "HuH-6", "C3A", "Hep G2", "huH-1", "JHH-5","Hep 3B2.1-7","HuH-7", "Alexander cells", "PLC_PRF_5")
+
+clstB <- c("SNU-182", "SNU-449", "JHH-2", "Li-7", "SNU-761","SNU-886", "JHH-4","HLE", "HLF", "SNU-475", "SNU-387", "SNU-423","SNU-878")
+
+clstC <- c("JHH-1", "SNU-398", "JHH-6", "SK-HEP-1", "NCI-H684")
+
+meta_tg$cluster <- c(rep(NA, dim(meta_tg)[1]))
+meta_tg$cluster <- ifelse(meta_tg$Cell.line.primary.name %in% clstA, yes = "A", no = meta_tg$cluster)
+meta_tg$cluster <- ifelse(meta_tg$Cell.line.primary.name %in% clstB, yes = "B", no = meta_tg$cluster)
+meta_tg$cluster <- ifelse(meta_tg$Cell.line.primary.name %in% clstC, yes = "C", no = meta_tg$cluster)
+
+meta_tg$cell_name_t <- paste(meta_tg$cluster, meta_tg$cell_name_t, sep = "_")
+
+```
+
+##process archives
+```{r archiveproc}
+# untar(tarfile = "CCLE_Expression.Arrays_2013-03-18.tar.gz",exdir = ".",compressed = T)
+# setwd("./CCLE_Expression.Arrays_2013-03-18/")
+# for (i in c(1:dim(meta_tg)[1])){
+#     file.rename(from = meta_tg$cell_name[i], to = meta_tg$cell_name_t[i])
+# }
+# 
+# # file.remove(meta_untg$cell_name)
+# 
+# cels <- list.files(pattern = ".CEL")
+# cels <- cels[!cels %in% meta_tg$cell_name_t]
+# file.remove(cels)
+# 
+# file.copy(from = meta_tg$cell_name_t,to = "../")
+# 
+# setwd("../")
+```
+
+
+##readaff
+```{r readaff}
+af.batch01 <- ReadAffy()
+rma_dat <- rma(af.batch01)
+mas5_dat <- mas5(af.batch01)
+
+
+truehist(as.matrix(exprs(rma_dat)))
+truehist(log2(as.matrix(exprs(mas5_dat))))
+```
+
+
+##mas5_clst
+```{r mas5_clst}
+data_mas5_log <- log2(exprs(mas5_dat))
+colnames(data_mas5_log) <- str_replace(string = colnames(data_mas5_log),pattern = "_liver.CEL",replacement = "")
+dend <- as.dist(1 - cor(data_mas5_log, method = "spearman")) %>% hclust(method = "average") %>% as.dendrogram
+dend %>% plot
+
+#d_label <- str_extract(string = colnames(data_mas5_log), "^.")
+ddata <- dendro_data(dend)
+
+labs <- label(ddata)
+labs$cluster <- str_extract(string = labs$label, pattern = "^.")
+
+gplot1 <- ggplot(segment(ddata)) +
+    geom_segment(aes(x=x, y=y, xend=xend, yend=yend))
+gplot1
+
+gplot2 <- gplot1 + geom_text(data = labs,aes(label=label, x=x, y=0, colour=labs$cluster))
+
+gplot2
+
+gplot3 <- ggplot(segment(ddata))+
+    geom_segment(aes(x=x, y=y, xend=xend, yend=yend),size=0.5)+
+    geom_text(data = labs,aes(label=label, x=x, y=0, colour=labs$cluster),hjust=0,size=12)+
+    labs(color="cell line category")+
+    coord_flip()+
+    labs(title="liver_cell_lines",y="hight")+
+    scale_y_reverse(expand=c(0.2,0))+
+      theme(axis.line.y=element_blank(),
+        axis.ticks.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.title.y=element_blank(),
+        panel.background=element_rect(fill="white"),
+        panel.grid=element_blank(),
+        text = element_text(family = "Arial",size=22))
+
+
+gplot3 <- ggplot(segment(ddata))+
+    geom_segment(aes(x=x, y=y, xend=xend, yend=yend),size=1)+
+    geom_text(data = labs,aes(label=str_replace(labs$label, "^[ABC]_",""), x=x, y=0, colour=labs$cluster),hjust=0,size=0.35*18)+
+    labs(color="cell line category")+
+    coord_flip()+
+    labs(title="liver_cell_lines",y="hight")+
+    scale_y_reverse(limit=c(max(segment(ddata)$y),-0.075),breaks=c(0.3,0.2,0.1,0))+
+      theme(axis.line.y=element_blank(),
+        axis.ticks.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.title.y=element_blank(),
+        panel.background=element_rect(fill="white"),
+        panel.grid=element_blank(),
+        text = element_text(family = "Arial",size=22))
+gplot3
+
+ggsave(filename = "liverKcelllines.tiff",plot = gplot3,dpi = 300,width = unit(9, "cm"),height = unit(7,"cm"))
+
+```
+
+##color modification
+```{r}
+newcol <- c(A="red",B="blue",C="green")
+newcol <- c(A="#ff0000",B="#0000ff",C="#008000")
+gplot4 <- ggplot()+
+    geom_segment(data=segment(ddata),aes(x=x, y=y, xend=xend, yend=yend),size=1)+
+    geom_text(data = labs,aes(label=str_replace(labs$label, "^[ABC]_",""), x=x, y=0, colour=labs$cluster),hjust=0,size=0.35*18)+
+    scale_colour_manual(values = newcol)+
+    labs(color="cell line category")+
+    coord_flip()+
+    labs(title="",y="hight")+
+    scale_y_reverse(limit=c(max(segment(ddata)$y),-0.075),breaks=c(0.3,0.2,0.1,0))+
+      theme(axis.line.y=element_blank(),
+        axis.ticks.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.title.y=element_blank(),
+        panel.background=element_rect(fill="white"),
+        panel.grid=element_blank(),
+        text = element_text(family = "Arial",size=18),
+        legend.text = element_text(family = "Arial",size=18),
+        legend.title = element_text(family = "Arial",size=18))
+gplot4
+ggsave(filename = "liverKcelllines4.tiff",plot = gplot4,dpi = 300,width = unit(9, "cm"),height = unit(7,"cm"))
+
+newcol <- c(A="#F8766D",B="#00BFC4",C="#74AE00")
+
+gplot5 <- ggplot()+
+    geom_segment(data=segment(ddata),aes(x=x, y=y, xend=xend, yend=yend),size=1)+
+    geom_text(data = labs,aes(label=str_replace(labs$label, "^[ABC]_",""), x=x, y=0, colour=labs$cluster),hjust=0,size=0.35*18)+
+    scale_colour_manual(values = newcol)+
+    labs(color="cell line category")+
+    coord_flip()+
+    labs(title="liver_cell_lines",y="hight")+
+    scale_y_reverse(limit=c(max(segment(ddata)$y),-0.075),breaks=c(0.3,0.2,0.1,0))+
+      theme(axis.line.y=element_blank(),
+        axis.ticks.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.title.y=element_blank(),
+        panel.background=element_rect(fill="white"),
+        panel.grid=element_blank(),
+        text = element_text(family = "Arial",size=22))
+gplot5
+ggsave(filename = "liverKcelllines5.tiff",plot = gplot5,dpi = 300,width = unit(9, "cm"),height = unit(7,"cm"))
+```
+
+
+##DEG
+```{r deg}
+deg_data <- data_mas5_log
+colnames(deg_data)
+!str_detect(colnames(deg_data),pattern = "SNU878|^C_")
+deg_data <- deg_data[,!str_detect(colnames(deg_data),pattern = "SNU878|^C_")]
+
+param_A <- 10
+param_B <- 12
+out_f <- "2Garray.txt"
+c(rep(1, param_A), rep(2, param_B))
+data.cl <- c(rep(1, param_A), rep(2, param_B))
+
+design <- model.matrix(~ as.factor(data.cl))
+fit <- lmFit(deg_data, design)
+out <- eBayes(fit)
+p.value <- out$p.value[, ncol(design)]
+q.value <- p.adjust(p.value, method = "BH")
+ranking <- rank(p.value)
+
+deg_df <- cbind(deg_data,p.value, q.value, ranking)
+A_df <- deg_df[,str_detect(string = colnames(deg_df),pattern = "^A_")]
+a_avg <- apply(A_df, 1, mean)
+B_df <- deg_df[,str_detect(string = colnames(deg_df),pattern = "^B")]
+b_avg <- apply(B_df, 1, mean)
+avg_sub <- a_avg - b_avg
+
+deg_df <- cbind(deg_df, a_avg,b_avg,avg_sub)
+
+
+annot.nm <- "HG-U133_Plus_2.na35.annot.csv"
+annot <- read.csv(annot.nm, header = T, sep = ",",skip = 25)
+
+g2_df <- merge(x = deg_df, y = annot, by.x=0, by.y=1, sort=F)
+g2_df$gene_cluster <- ifelse(a_avg > b_avg, "A", "B")
+
+write.table(x = g2_df,file = "2Garray.annot_2.txt",sep = "\t",row.names = T,col.names = NA)
+
+
+target_id <- g2_df[g2_df$q.value < 0.0001,]
+target_id <- target_id[target_id$Gene.Symbol != "---",]
+target_id_A <- target_id[target_id$gene_cluster =="A",]
+target_id_B <- target_id[target_id$gene_cluster =="B",]
+```
+
+```{r}
+g2_genes_df <- g2_df[g2_df$q.value < 0.0001,]
+g2_genes_df <- g2_genes_df[sort.list(g2_genes_df$avg_sub,decreasing = T),]
+write.table(x = g2_genes_df, file = "g2_genes.txt",sep = "\t",row.names = T, col.names = NA)
+```
+
+##heatmap about DEGs
+```{r}
+par(family="Arial")
+
+h <- g2_genes_df
+rownames(h) <- paste(h$Gene.Symbol,h$Row.names,sep = "_")
+rowlabel <- ifelse(h$gene_cluster=="A","red","blue")
+h <- h[,str_detect(colnames(h),"A_|B_") ]
+collabel <- ifelse(str_detect(colnames(h),"A_"),"red","blue")
+colnames(h) <- str_replace(colnames(h), "^[AB]_","")
+
+lm <- rbind(c(4,5,6),c(0,2,0),c(1,3,0))
+lwd <- c(0.2,4,2)
+lh <- c(2,0.2,5)
+#heatmap.2(x = as.matrix(h),Rowv = F,Colv = T,dendrogram = "col",col = bluered(256),trace = "none",cexRow = 0.1,cexCol = 0.5,srtRow = 45,srtCol = 45, main = "DEG between 2 clusters",ColSideColors = collabel,RowSideColors = rowlabel,symbreaks=F,symm=F,symkey=F,lmat = lm, lwid = lwd,lhei = lh)
+
+heatmap.2(x = as.matrix(h),Rowv = F,Colv = T,dendrogram = "col",col = bluered(256),trace = "none",cexRow = 0.1,cexCol = 0.5,srtRow = 45,srtCol = 45, main = "DEG between 2 clusters",ColSideColors = collabel,RowSideColors = rowlabel,symbreaks=F,symm=F,symkey=F)
+
+h1 <- heatmap.2(x = as.matrix(h),Rowv = F,Colv = T,dendrogram = "col",col = bluered(256),trace = "none",cexCol = 1,labRow = F,srtCol = 45, main = "DEG between 2 clusters",ColSideColors = collabel,RowSideColors = rowlabel,symbreaks=F,symm=F,symkey=F)
+
+hh <- t(h)
+h2collabels <- rowlabel
+h2rowlabels <- collabel
+
+lm2 <- rbind(c(0,6,4),c(0,2,5),c(1,3,0))
+lh <- c(1,0.2,4)
+lw <- c(0.1,2,0.3)
+
+heatmap.2(x = as.matrix(hh),Rowv = T,Colv = T,dendrogram = "none",col = bluered(256),trace = "none", cexRow=1.5,labCol = NA, srtRow = 45,ColSideColors = h2collabels,RowSideColors = h2rowlabels,symbreaks=F,symm=F,symkey=F,hclustfun = function(x) hclust(x,method = "ward.D"),lmat = lm2,lwid = lw,lhei = lh,key.par = list(mar=c(3,12,3,12)),key.xlab = NA,margins = c(1,1))
+
+tiff(filename = "heatmap.deg.tiff",width = 1920, height = 1920,units = "px",res = 300,bg = "white")
+heatmap.2(x = as.matrix(hh),Rowv = T,Colv = T,dendrogram = "none",col = bluered(256),trace = "none", cexRow=1.5,labCol = NA, srtRow = 45,ColSideColors = h2collabels,RowSideColors = h2rowlabels,symbreaks=F,symm=F,symkey=F,hclustfun = function(x) hclust(x,method = "ward.D"),lmat = lm2,lwid = lw,lhei = lh,key.par = list(mar=c(3,12,3,12)),key.xlab = NA,margins = c(1,1))
+
+# lm2 <- h2$layout$lmat
+# h2$layout
+# class(lm2)
+# lm2
+# h2
+# fonts()
+dev.off()
+
+```
+
+##commented genes
+```{r}
+comments <- c("AFP","COL6A1","COL6A2","GPC3","TIMP2")
+
+
+gh <- g2_genes_df
+rownames(gh) <- paste(gh$Gene.Symbol,gh$Row.names,sep = "_")
+gh_collabel <- ifelse(gh$gene_cluster=="A","red","blue")
+i <- 3
+for(i in c(1:length(gh_collabel))){
+    if(is.element(gh$Gene.Symbol[i], comments)[1] && gh$gene_cluster[i]=="A"){
+        gh_collabel[i] <- "pink"
+    }
+    else if(is.element(gh$Gene.Symbol[i], comments)[1] && gh$gene_cluster[i]=="B"){
+        gh_collabel[i] <- "cyan"
+    }
+}
+gh_collabel
+
+
+gh <- gh[,str_detect(colnames(gh),"A_|B_") ]
+
+gh_rowlabel <- ifelse(str_detect(colnames(gh),"A_"),"red","blue")
+colnames(gh) <- str_replace(colnames(gh), "^[AB]_","")
+
+col_name_mod <- rownames(gh)
+
+#plan A
+#col_name_mod <- str_extract(col_name_mod,pattern = "^[0-9A-Z]*")
+#col_name_mod <- ifelse(test = col_name_mod %in% comments, yes = col_name_mod, no = "")
+
+#plan B
+col_name_mod <- ifelse(test = str_extract(col_name_mod,pattern = "^[0-9A-Z]*") %in% comments,
+                       yes = col_name_mod, no = "")
+
+col_name_mod
+
+```
+
+
+
+##processing data
+```{r}
+df <- t(gh)
+clst_method="average"
+dist_method="spearman"
+colslider = gh_collabel
+rowslider = gh_rowlabel
+ColV=F
+RowV=T
+colnames=T
+rownames=T
+colangle=45
+rowangle=45
+colours=c("blue", "white", "red")
+key.axis.fontsize=12
+main="title"
+add_p=NULL
+lmat=NULL
+lhei=NULL
+lwid=NULL
+font.size=10
+col_name_label_mod = col_name_mod
+```
+
+
+
+##ggheat
+```{r}
+ggheat <- function(df,
+clst_method="average",
+dist_method="spearman",
+colslider, rowslider,
+ColV=T, RowV=T,
+colnames=T, rownames=T,
+colangle=45, rowangle=45,
+colours=c("blue", "white", "red"),
+key.axis.fontsize=12,
+main="title",
+add_p=NULL,
+lmat=NULL,
+lhei=NULL,lwid=NULL,
+font.size=10,
+col_name_label_mod = NULL){
+    require(ggplot2)
+    require(reshape2)##for melting
+    require(grid)
+    require(gridExtra)
+    require(ggdendro)
+    require(scales)
+    ##common theme function
+    theme_ggh <- function(font.size=10,legend.position = "none") {
+        theme(axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.title = element_blank(),
+        axis.line = element_blank(),
+        axis.ticks = element_blank(),
+        plot.title = element_blank(),
+        panel.grid = element_blank(),
+        panel.border = element_blank(),
+        panel.spacing = element_blank(),
+        panel.background = element_blank(),
+        plot.background = element_blank(),
+        plot.margin = unit(c(0,0,0,0),"cm"),
+        text = element_text(family = "Arial",size=font.size,lineheight = 0.7),
+        legend.position = "none"
+        )
+    }
+
+    ##blank grid for plotting blank
+    blank_grid <- grid.rect(gp=gpar(col="white"))
+
+    df <- as.data.frame(df)
+
+    ##clustering if needed
+    cluster_data <- list()
+    if(ColV==T){
+        dist_x <- as.dist(1-cor(as.matrix(df),method = dist_method))
+        clst_x <- hclust(dist_x,method = clst_method)
+        df <- df[,clst_x$order]
+        colslider <- colslider[clst_x$order]
+        if(!is.null(col_name_label_mod)){
+            col_name_label_mod <- col_name_label_mod[clst_x$order]
+        }
+        cluster_data <- append(cluster_data, list(clst_x))
+    }
+
+    if(RowV==T){
+        dist_y <- as.dist(1-cor(as.matrix(t(df)),method = dist_method))
+        clst_y <- hclust(dist_y,method = clst_method)
+        df <- df[clst_y$order,]
+        rowslider <- rowslider[clst_y$order]
+        cluster_data <- append(cluster_data, list(clst_y))
+    }
+
+    ##matrix prepareation
+    colname <- colnames(df)
+    colname <- data.frame(text=colname, x=c(1:length(colname)),colslider=colslider)
+    colnames(df) <- c(1:ncol(df))
+    
+    
+    if(!is.null(col_name_label_mod)){
+        colname$original_label <- colname$text
+        colname$text <- col_name_label_mod
+    }
+    
+
+    rowname <- rownames(df)
+    rowname <- data.frame(text=rowname, y=c(1:length(rowname)),rowslider=rowslider)
+    rownames(df) <- c(1:nrow(df))
+
+    tiledata <- melt(as.matrix(df))
+    
+    df_melt <- tiledata
+    
+
+    ##heatmap is p1
+    p1 <- ggplot()+
+        geom_tile(data = tiledata, mapping = aes(x=Var2, y = Var1, fill=value))+
+        scale_x_continuous(expand=c(0,0))+
+        scale_y_continuous(expand=c(0,0))+
+        scale_fill_gradient2(low = colours[1],mid = colours[2],high = colours[3],midpoint = (max(tiledata$value)+min(tiledata$value))/2)+
+        guides(fill=F)+
+        theme_ggh()
+    #p1
+
+    ##colslider is cols
+    cols <- ggplot()+
+        geom_tile(data=colname,aes(x=x,y=0,fill=colslider))+
+        scale_fill_identity(guide = "legend")+
+        scale_x_continuous(expand=c(0,0))+
+        scale_y_continuous(expand=c(0,0))+
+        theme_ggh()
+    ##          
+
+    #cols
+
+    ##rowslider is rows
+
+    rows <- ggplot()+
+        geom_tile(data=rowname,aes(x=0,y=y,fill=rowslider))+
+        scale_fill_discrete(name="category")+
+        scale_x_continuous(expand=c(0,0))+
+        scale_y_continuous(expand=c(0,0))+
+        theme(legend.text = element_text(family = "Arial",size=font.size,lineheight = 0.7),
+        legend.title =element_text(family = "Arial",size=font.size+2,lineheight = 0.7))
+
+    rows_grob <- ggplot_gtable(ggplot_build(rows))
+    id.legend <- which(sapply(rows_grob$grobs, function(x) x$name)=="guide-box")
+    rows_legend <- rows_grob$grobs[[id.legend]]
+
+    rows <- ggplot()+
+        geom_tile(data=rowname,aes(x=0,y=y,fill=rowslider))+
+        scale_fill_identity(guide = "legend")+
+        scale_x_continuous(expand=c(0,0))+
+        scale_y_continuous(expand=c(0,0))+
+        theme_ggh()
+    #rows
+
+    ##col dendrogram if needed
+    if(ColV==T){
+        coldend <- as.dendrogram(clst_x)
+        #plot(coldend)
+        coldend <- segment(dendro_data(coldend))
+        cold <- ggplot()+
+            geom_segment(data=coldend,aes(x=x, y=y, xend=xend, yend=yend))+
+            scale_x_continuous(expand=c(0,0),limits = c(0.5,max(coldend$xend)+0.5))+
+            scale_y_continuous(expand=c(0,0))+
+            theme_ggh()
+        #cold
+    }else{
+        cold <- blank_grid
+    }
+
+    ##row dendrogram if needed
+    if(RowV==T){
+        rowdend <- as.dendrogram(clst_y)
+        #plot(rowdend)
+        rowdend <- segment(dendro_data(rowdend))
+        rowd <- ggplot()+
+            geom_segment(data = rowdend,aes(x=x, y=y, xend=xend, yend=yend))+
+            scale_x_continuous(expand=c(0,0),limits = c(0.5,max(rowdend$xend)+0.5))+
+            scale_y_continuous(expand=c(0,0))+
+            theme_ggh()+
+            coord_flip()
+#                    scale_x_continuous(expand=c(0,0),limits = c(0.5,max(rowdend$xend)+0.5))+
+
+        rowd
+    }else{
+        rowd <- blank_grid
+    }
+
+    ##key histgram(density plot)
+    key_hist <- hist(tiledata$value,breaks = 50,plot = F)
+    max_hist <- max(key_hist$density)
+    key_density <- data.frame(range=seq(min(tiledata$value)-1, max(tiledata$value)+1, 0.02))
+    key_density_range <- density(tiledata$value)
+
+    key <-  ggplot()+
+        geom_tile(data = key_density,
+        mapping = aes(x = range, y=max_hist/2*1.2,fill=range,width=0.02, height=max_hist*1.2),
+        show.legend = F)+
+        scale_fill_gradient2(low = colours[1],mid = colours[2],high = colours[3],
+        midpoint = (max(tiledata$value)+min(tiledata$value))/2,
+        limits=c(min(tiledata$value),max(tiledata$value)),
+        oob=squish)+
+        scale_x_continuous(expand=c(0,0))+
+        scale_y_continuous(expand=c(0,0))+
+        geom_histogram(data = tiledata,mapping = aes(x=value,y=..density..),
+        alpha=0.8, binwidth = (max(tiledata$value)-min(tiledata$value))/50)+
+        guides(fill=F,colour=F)+xlab("")+ylab("")+
+        theme_classic()+
+        theme(text = element_text(family = "Arial",size=font.size,lineheight = 0.7),
+        axis.text.x =  element_text(family = "Arial",size=key.axis.fontsize),
+        axis.text.y =  element_text(family = "Arial",size=key.axis.fontsize),
+        plot.margin = unit(c(0,0,-0.02,-0.015),"native"))
+    #key
+
+    ##colnames
+    #additional modification about col label potision.
+    #two TIMP2 probe sets are too closed.
+    sub_timp <- 1
+    timps <- colname[str_detect(colname$text, "^TIMP2"),]
+    colname$x[timps$x[1]] <- colname$x[timps$x[1]] - sub_timp
+    colname$x[timps$x[2]] <- colname$x[timps$x[2]] + sub_timp
+    
+    ##colnames
+    if(colnames==T){
+        colname_label <- ggplot()+
+            geom_text(data=colname,mapping = aes(x=x,y=0, label=text,angle=colangle),
+            size=font.size,hjust=0)+
+            scale_x_continuous(expand=c(0,0),limits = c(min(colname$x)-0.5, max(colname$x)+0.5))+
+            scale_y_continuous(expand=c(0,0),limits = c(0,1))+
+            theme_ggh(font.size =font.size)
+        colname_table <- ggplot_gtable(ggplot_build(colname_label))
+        colname_table$layout$clip[colname_table$layout$name=="panel"] <- "off"
+        #class(colname_table)
+        #colname_label
+    }else{
+        colname_label <- blank_grid
+        colname_table <- blank_grid
+    }
+
+    ##rownames
+    if(rownames==T){
+        rowname_label <- ggplot()+
+            geom_text(data = rowname,mapping = aes(x=0,y=y, label=text,angle=rowangle),
+            size=font.size,hjust=0,vjust=+1)+
+            scale_x_continuous(expand=c(0,0),limits = c(0,0.05))+
+            scale_y_continuous(expand=c(0,0),limits = c(min(rowname$y)-0.5, max(rowname$y)+0.5))+
+            theme_ggh(font.size =font.size)
+        rowname_table <- ggplot_gtable(ggplot_build(rowname_label))
+        rowname_table$layout$clip[rowname_table$layout$name=="panel"] <- "off"
+        #rowname_label
+    }else{
+        rowname_label <- blank_grid
+        rowname_table <- blank_grid
+    }
+
+    if(!is.null(add_p)){
+        add <- add_p
+    }else{
+        add <- blank_grid
+    }
+    #add <- b1
+    #add <- rows_legend
+
+    ##layout
+    if(is.null(lmat) | is.null(lwid) | is.null(lhei)){
+        lmat <- rbind(c(2,1,1,8,8,8),
+        c(1,1,9,8,8,8),
+        c(1,1,4,8,8,8),
+        c(1,10,3,5,7,1),
+        c(1,1,6,1,1,1))
+        lwid <- c(0.01, 0.2, 1.3, 0.05,0.2,0.15)
+        lhei <- c(0.12,0.4,0.1,2,0.01)
+    }
+
+
+    g1 <- grid.arrange(blank_grid,#1
+    add,#2
+    p1,#3
+    cols,#4
+    rows,#5
+    cold,#6
+    rowd,#7
+    key,#8
+    colname_table,#9
+    rowname_table,#10
+    layout_matrix=lmat,heights=lhei, widths=lwid,
+    top=textGrob(main, gp=gpar(fontsize=20,fontfamily="Arial")))
+    
+    result_list <- list(plot_data=g1, 
+                        cluster_data=cluster_data,
+                        df = df,
+                        df_melt = df_melt,
+                        colname = colname,
+                        rowname = rowname)
+    return(result_list)
+}
+
+```
+
+
+```{r}
+gh2 <- ggheat(df = t(gh),colslider = colslider,rowslider =  rowslider,ColV = F,colnames = T,col_name_label_mod = col_name_mod,colangle = 60,main = "",rowangle=45,font.size = 3.5)
+
+
+grid::grid.draw(gh2$plot_data)
+
+
+gh3 <- ggheat(df = t(gh),colslider = colslider,rowslider =  rowslider,ColV = F,colnames = T,col_name_label_mod = col_name_mod,colangle = 60,main = "",rowangle=45,font.size = 4)
+
+ggsave(plot=gh3$plot_data, filename = "gh3.tiff",width = 18,height = 15,units = "cm",dpi = 300)
+
+ggsave(plot=gh2$plot_data,filename = "gh2_cellline_degheat.tiff",width = 18,height = 15,units = "cm",dpi = 300)
+```
+
+getDF
+```{r}
+cl <- gh2$colname
+df4_send <- gh2$df
+colnames(df4_send) <- cl$original_label
+
+rn <- gh2$rowname %>%
+  dplyr::arrange(-y) %>%
+  mutate(category = case_when(
+    rowslider == "red" ~ "A",
+    rowslider == "blue" ~ "B")) %>%
+  dplyr::rename(cell_line = text)
+df4_send4_out <- merge(rn, df4_send, by.x="y", by.y=0, sort=F) %>%
+  dplyr::select(-y, -rowslider)
+  
+row.names(df4_send) <- rn$text
+
+openxlsx::write.xlsx(df4_send4_out, "./R_87mod_cell_line_deg_heat.xlsx",rowNames =F)
+
+
+df_melt <- gh2$df_melt
+
+p_test <- ggplot()+theme_light()+
+  geom_tile(data = df_melt,
+            aes(x=Var2,
+                y=Var1,
+                fill=value))
+p_test
+```
+
+
+
+##mas5genes_to_pc_atlas
+```{r mas5_pcatlas}
+atlas <- read.table(file = "Human_primary_cell_atlas.expression",
+                    sep = "\t",header = T,as.is = T,quote = "")
+
+atlas <- atlas[atlas$ID %in% target_id$Row.names,]
+atlas <- atlas[,!str_detect(colnames(atlas),pattern = "Embryonic_stem_cell|ES_cell|iPS_cell|fetal")]
+colnames(atlas)
+
+truehist(as.matrix(atlas[,-c(1:9)]))
+truehist(log2(as.matrix(atlas[,-c(1:9)])))
+
+atlas[,-c(1:9)] <- log2(atlas[,-c(1:9)])
+
+rma <- exprs(rma_dat)
+rma <- rma[rownames(rma) %in% target_id$Row.names,]
+
+mixed_tb <- merge(x = atlas,y = rma,by.x = "ID", by.y = 0,sort = F)
+rownames(mixed_tb) <- mixed_tb$Name
+
+mx <- mixed_tb[,-c(1:9)]
+colnames(mx)
+mx_labels <- colnames(mx)
+mx_labels <- str_extract(string = mx_labels,pattern = "^A_|^B_|^C_|MSC|Fibroblast|Hepatocyte|Smooth_muscle_cell")
+mx_labels <- ifelse(is.na(mx_labels),"ref",mx_labels)
+
+for( i in c(1:length(mx_labels))){
+    if (mx_labels[i] =="A_"){
+        mx_labels[i] <- "red"
+    }
+    else if (mx_labels[i] =="B_"){
+        mx_labels[i] <- "blue"
+    }
+    else if (mx_labels[i] =="C_"){
+        mx_labels[i] <- "green"
+    }
+    else if (mx_labels[i] =="Fibroblast"){
+        mx_labels[i] <- "black"
+    }
+    else if (mx_labels[i] =="Hepatocyte"){
+        mx_labels[i] <- "orange"
+    }
+    else if (mx_labels[i] =="MSC"){
+        mx_labels[i] <- "gray"
+    }
+    else if (mx_labels[i] =="Smooth_muscle_cell"){
+        mx_labels[i] <- "purple"
+    }
+    else if (mx_labels[i] =="ref"){
+        mx_labels[i] <- "white"
+    }
+}
+
+mx_labels
+mx_labels <- as.vector(mx_labels)
+class(mx_labels)
+
+gene_labels <- rownames(mx)
+gene_labels <- str_replace(string = gene_labels,pattern = "^[A-Z0-9]*;","")
+gene_labels <- ifelse(gene_labels %in% target_id_A$Row.names,"red","blue")
+gene_labels
+
+heatmap.2(x = as.matrix(mx),Rowv = T,Colv = T,dendrogram = "both",col = bluered(256),trace = "none",cexRow = 0.1,cexCol = 0.1,srtRow = 45,srtCol = 45, main = "sample_mapping",ColSideColors = mx_labels,hclustfun = function(x) hclust(x,method = "ward.D2"),RowSideColors = gene_labels, lwid = c(2,10))
+
+heatmap.2(x = as.matrix(mx),Rowv = T,Colv = T,dendrogram = "both",col = bluered(256),trace = "none",cexRow = 0.1,cexCol = 0.1,srtRow = 45,srtCol = 45, main = "mapping",ColSideColors = mx_labels,hclustfun = function(x) hclust(x,method = "ward.D2"),distfun = function(x) as.dist(1-cor(t(x),method = "spearman")),RowSideColors = gene_labels, lwid = c(2,10))
+
+heatmap.2(x = as.matrix(mx),Rowv = T,Colv = T,dendrogram = "both",col = bluered(256),trace = "none",cexRow = 0.1,cexCol = 0.1,srtRow = 45,srtCol = 45, main = "mapping",ColSideColors = mx_labels,hclustfun = function(x) hclust(x,method = "ward.D2"),distfun = function(x) as.dist(1-cor(t(x),method = "spearman")),RowSideColors = gene_labels, lwid = c(2,10),labRow = F,labCol = F)
+```
+
+##heat_a
+```{r heat_a}
+mix_a <- mixed_tb[mixed_tb$ID %in% target_id_A$Row.names,]
+mix_a <- as.matrix(mix_a[,-c(1:9)])
+
+heatmap.2(x = mix_a,Rowv = T,Colv = T,dendrogram = "both",col = bluered(256),trace = "none",cexRow = 0.1,cexCol = 0.1,srtRow = 45,srtCol = 45, main = "Agenes_mapping",ColSideColors = mx_labels, lwid = c(2,10))
+```
+
+##heat_b
+```{r heat_b}
+mix_b <- mixed_tb[mixed_tb$ID %in% target_id_B$Row.names,]
+mix_b <- as.matrix(mix_b[,-c(1:9)])
+
+heatmap.2(x = mix_b,Rowv = T,Colv = T,dendrogram = "both",col = bluered(256),trace = "none",cexRow = 0.1,cexCol = 0.1,srtRow = 45,srtCol = 45, main = "Bgenes_mapping",ColSideColors = mx_labels, lwid = c(2,10))
+```
+
+##re_define B
+```{r}
+target_id_B2 <- g2_df[g2_df$q.value < 0.01 & g2_df$gene_cluster == "B",]
+target_id_B2 <- target_id_B2[target_id_B2$Gene.Symbol != "---",]
+
+rma_B2 <- exprs(rma_dat)
+rma_B2 <- rma_B2[rownames(rma_B2) %in% target_id_B2$Row.names,]
+rma_B2 <- rma_B2[,str_detect(colnames(rma_B2),pattern = "^B_")]
+
+atlas_B2 <- read.table(file = "Human_primary_cell_atlas.expression",
+                    sep = "\t",header = T,as.is = T,quote = "")
+
+atlas_B2 <- atlas_B2[atlas_B2$ID %in% target_id_B2$Row.names,]
+atlas_B2 <- atlas_B2[,!str_detect(colnames(atlas_B2),pattern = "Embryonic_stem_cell|ES_cell|iPS_cell|fetal")]
+atlas_B2 <- atlas_B2[,!str_detect(colnames(atlas_B2),pattern = "Epithelial_cell|Endothelial_cell|Keratinocyte|Hepatocyte|BM_|Platelets|Erythroblast|Monocyte|Macrophage|DC\\.|T_cell|NK_cell|Neutrophil|B_cell|Gametocyte")]
+atlas_B2[,-c(1:9)] <- log2(atlas_B2[,-c(1:9)])
+
+
+
+
+mixed_tb_B2 <- merge(x = atlas_B2,y = rma_B2,by.x = "ID", by.y = 0,sort = F)
+rownames(mixed_tb_B2) <- mixed_tb_B2$Name
+
+mx_B2 <- mixed_tb_B2[,-c(1:9)]
+
+mx_labels_B2 <- colnames(mx_B2)
+mx_labels_B2 <- str_extract(string = mx_labels_B2,pattern = "^B_|MSC|Fibroblast|Smooth_muscle_cell|Adipocyte|Osteoblast|Neurone")
+mx_labels_B2 <- ifelse(is.na(mx_labels_B2),"ref",mx_labels_B2)
+mx_labels_B2
+colnames(mx_B2)
+
+for( i in c(1:length(mx_labels_B2))){
+    if (mx_labels_B2[i] =="B_"){
+        mx_labels_B2[i] <- "blue"
+    }
+    else if (mx_labels_B2[i] =="Fibroblast"){
+        mx_labels_B2[i] <- "black"
+    }
+    else if (mx_labels_B2[i] =="MSC"){
+        mx_labels_B2[i] <- "gray"
+    }
+    else if (mx_labels_B2[i] =="Smooth_muscle_cell"){
+        mx_labels_B2[i] <- "purple"
+    }
+    else if (mx_labels_B2[i] =="Adipocyte"){
+        mx_labels_B2[i] <- "orange"
+    }
+    else if (mx_labels_B2[i] =="Osteoblast"){
+        mx_labels_B2[i] <- "pink"
+    }
+    else if (mx_labels_B2[i] =="Neurone"){
+        mx_labels_B2[i] <- "green"
+    }
+    else if (mx_labels_B2[i] =="ref"){
+        mx_labels_B2[i] <- "white"
+    }
+}
+
+
+
+heatmap.2(x = as.matrix(mx_B2),Rowv = T,Colv = T,dendrogram = "both",col = bluered(256),trace = "none",cexRow = 0.1,cexCol = 0.1,srtRow = 45,srtCol = 45, main = "sample_mapping",ColSideColors = mx_labels_B2,hclustfun = function(x) hclust(x,method = "ward.D"), lwid = c(2,10))
+```
+
+##sessioninfo
+```{r}
+sessionInfo()
+Sys.time()
+Sys.info()
+```
+
