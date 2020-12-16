@@ -1,0 +1,860 @@
+---
+title: "77GEarray_re"
+author: "fkeita"
+date: "2016/12/24"
+output: html_document
+---
+## GE cell line clustering_re
+General setup
+
+```{r setup}
+knitr::opts_chunk$set(echo = TRUE, cache = TRUE,cache.lazy = FALSE)
+source("http://bioconductor.org/biocLite.R")
+#install.packages("magrittr")
+#biocLite("GGally")
+require("affy")
+require("MASS")
+require("R.utils")
+require("stringr")
+require("GGally")
+require("ggplot2")
+require("magrittr")
+#install.packages("ggdendro")
+require("ggdendro")
+#install.packages("extrafont")
+#install.packages("extrafontdb")
+require("extrafont")
+require(extrafontdb)
+#font_import()
+#font_install('Arial')
+loadfonts(quiet = T)
+set.seed(20161224)
+```
+
+
+##read metadat  
+archive files were downloaded from CCLE portal.  
+https://portals.broadinstitute.org/ccle/home
+```{r read_meta}
+meta <- read.table(file = "CCLE_Expression.Arrays.sif_2012-10-18.txt",header = T,sep = "\t",stringsAsFactors = F)
+meta$cell_name <- paste(meta$ID,rep("CEL",dim(meta)[1]),sep = ".")
+meta$cell_name_t <- paste(meta$Cell.line.primary.name,meta$Site.Primary,sep = "_")
+meta$cell_name_t <- paste(meta$cell_name_t,rep("CEL",dim(meta)[1]),sep = ".")
+meta$cell_name_t <- str_replace_all(meta$cell_name_t,pattern = "\\ ",replacement ="" )
+meta$cell_name_t <- str_replace_all(meta$cell_name_t,pattern = "\\-",replacement ="")
+meta$cell_name_t <- str_replace_all(meta$cell_name_t,pattern = "\\/",replacement ="_")
+
+table(meta$Site.Primary)
+target_site <- c("biliary_tract","large_intestine","liver","oesophagus","pancreas",
+                 "small_intestine","stomach")
+meta_tg <- meta[meta$Site.Primary %in% target_site,]
+meta_untg <- meta[!meta$Site.Primary %in% target_site,]
+```
+
+##process archives
+```{r archiveproc}
+untar(tarfile = "CCLE_Expression.Arrays_2013-03-18.tar.gz",exdir = ".",compressed = T)
+setwd("~/Desktop/disk02/Dropbox/Rsta/77GEarray_re/CCLE_Expression.Arrays_2013-03-18/")
+for (i in c(1:dim(meta_tg)[1])){
+    file.rename(from = meta_tg$cell_name[i], to = meta_tg$cell_name_t[i])
+}
+
+file.remove(meta_untg$cell_name)
+#file.copy(from = meta_tg$cell_name_t,to = "~/Desktop/disk02/Dropbox/Rsta/77GEarray_re/")
+cels <- list.files(pattern = ".CEL")
+cels <- cels[!cels %in% meta_tg$cell_name_t]
+file.remove(cels)
+
+```
+
+##read
+this step will require large memory.  
+```{r readaffy}
+setwd(dir = "~/Desktop/disk02/Dropbox/Rsta/77GEarray_re/CCLE_Expression.Arrays_2013-03-18/")
+af.batch <- ReadAffy(filenames = list.files(path = ".",pattern = ".CEL"))
+#af.batch <- read.affybatch(filenames = list.files(path = ".",pattern = ".CEL"))
+setwd(dir = "~/Desktop/disk02/Dropbox/Rsta/77GEarray_re/")
+```
+
+##normalization
+```{r norm}
+mas5log2.nm <- "mas5log2.txt"
+batch.med.data <- mas5(af.batch)
+
+exprs(batch.med.data) <- log2(exprs(batch.med.data))
+#write.exprs(batch.med.data, file = mas5log2.nm)
+data.mas5.log2 <- exprs(batch.med.data)
+
+```
+
+##colname fix
+```{r namefix}
+colnames(data.mas5.log2) <- str_replace_all(string = colnames(data.mas5.log2),pattern = ".CEL",replacement = "")
+```
+
+##plot and catalog
+```{r plotcat}
+truehist(data.mas5.log2,main="All_variable")
+
+means <- apply(data.mas5.log2, 1, mean)
+truehist(means)
+vars <- apply(data.mas5.log2, 1, var)
+truehist(vars)
+medians <- apply(data.mas5.log2, 1, median)
+truehist(medians)
+mads <- apply(data.mas5.log2, 1, mad)
+truehist(mads)
+
+
+
+catalog <- as.matrix(data.frame(means, vars, medians,mads))
+catalog <- data.frame(means, vars, medians,mads)
+
+catalog$labels <- rep(NA, dim(catalog)[1])
+
+labes_cat <- c("low_low", "low_high", "high_low", "high_high")
+for (i in 1:dim(catalog)[1]){
+    if (catalog$medians[i] <= 5 && catalog$mads[i] <= 1){
+        catalog$labels[i] <- labes_cat[1]
+    }
+    else if(catalog$medians[i] <= 5 && catalog$mads[i] > 1){
+        catalog$labels[i] <- labes_cat[2]
+    }
+    else if(catalog$medians[i] > 5 && catalog$mads[i] <= 1){
+        catalog$labels[i] <- labes_cat[3]
+    }
+    else if(catalog$medians[i] > 5 && catalog$mads[i] > 1){
+        catalog$labels[i] <- labes_cat[4]
+    }
+    else{
+        catalog$labels[i] <- "categoli_error"
+    }
+}
+table(catalog$labels)
+```
+
+##scat_matrix
+```{r scatmat}
+labels <- catalog$labels
+d <- catalog[,-ncol(catalog)]
+
+N_col <- ncol(d)
+ggp <- ggpairs(d, upper="blank", diag="blank",lower="blank")
+
+for(i in 1:N_col) {
+  x <- d[,i]
+  p <- ggplot(data.frame(x, gr=labels), aes(x))
+  p <- p + theme(text=element_text(size=14), axis.text.x=element_text(angle=40, vjust=1, hjust=1))
+  if (class(x) == 'factor') {
+    p <- p + geom_bar(aes(fill=gr), color='grey20')
+  } else {
+    bw <- (max(x)-min(x))/10
+    p <- p + geom_histogram(binwidth=bw, aes(fill=gr), color='grey20')
+    p <- p + geom_line(eval(bquote(aes(y=..count..*.(bw)))), stat='density')
+  }
+  p <- p + geom_label(data=data.frame(x=-Inf, y=Inf, label=colnames(d)[i]), aes(x=x, y=y, label=label), hjust=0, vjust=1)
+  ggp <- putPlot(ggp, p, i, i)
+}
+
+zcolat <- seq(-1, 1, length=81)
+zcolre <- c(zcolat[1:40]+1, rev(zcolat[41:81]))
+
+for(i in 1:(N_col-1)) {
+  for(j in (i+1):N_col) {
+    x <- as.numeric(d[,i])
+    y <- as.numeric(d[,j])
+    r <- cor(x, y, method='spearman', use='pairwise.complete.obs')
+    zcol <- lattice::level.colors(r, at=zcolat,
+      col.regions=colorRampPalette(c(scales::muted('red'), 'white', scales::muted('blue')), space='rgb')(81))
+    textcol <- ifelse(abs(r) < 0.4, 'grey20', 'white')
+    ell <- ellipse::ellipse(r, level=0.95, type='l', npoints=50, scale=c(.2, .2), centre=c(.5, .5))
+    p <- ggplot(data.frame(ell), aes(x=x, y=y))
+    p <- p + theme_bw() + theme(
+      plot.background=element_blank(),
+      panel.grid.major=element_blank(), panel.grid.minor=element_blank(),
+      panel.border=element_blank(), axis.ticks=element_blank()
+    )
+    p <- p + geom_polygon(fill=zcol, color=zcol)
+    p <- p + geom_text(data=NULL, x=.5, y=.5, label=100*round(r, 2), size=6, col=textcol)
+    ggp <- putPlot(ggp, p, i, j)
+  }
+}
+
+
+for(j in 1:(N_col-1)) {
+  for(i in (j+1):N_col) {
+    x <- d[,j]
+    y <- d[,i]
+    p <- ggplot(data.frame(x, y, gr=labels), aes(x=x, y=y, color=gr))
+    p <- p + theme(text=element_text(size=14), axis.text.x=element_text(angle=40, vjust=1, hjust=1))
+    if (class(x) == 'factor') {
+      p <- p + geom_boxplot(aes(group=x), alpha=3/6, outlier.size=0, fill='white')
+      p <- p + geom_point(position=position_jitter(w=0.4, h=0), size=1)
+    } else {
+      p <- p + geom_point(size=0.05)
+    }
+    ggp <- putPlot(ggp, p, i, j)
+  }
+}
+
+ggp
+
+```
+
+##RAWclust
+```{r rawclst}
+data.dist.mas5 <- as.dist(1 - cor(data.mas5.log2, method = "spearman"))
+clst.data.mas5 <- hclust(data.dist.mas5, method = "average")
+#par(ps=1, pin=c(30,30));
+plot(clst.data.mas5)
+dev.off()
+```
+
+##filter and clst
+```{r filtclst}
+flt <- data.mas5.log2[catalog$medians>5,]
+data.flt <- as.dist(1- cor(flt, method = "spearman"))
+clst.flt <- hclust(data.flt, method = "average")
+#par(ps=1);
+plot(clst.flt)
+```
+
+##ggplot2_plot
+```{r}
+meta_tg <- meta_tg[sort.list(meta_tg$cell_name_t),]
+meta_tg$label_name <- meta_tg$cell_name_t
+meta_tg$label_name <- str_replace(string = meta_tg$label_name, pattern = ".CEL",replacement = "")
+
+col_table <- data.frame(meta_tg$Site.Primary[!duplicated(meta_tg$Site.Primary)],
+                        rainbow(length(meta_tg$Site.Primary[!duplicated(meta_tg$Site.Primary)])))
+col_table <- merge(meta_tg, col_table,by.x = "Site.Primary", by.y = 1,sort = F)
+
+dend <- as.dist(1 - cor(data.mas5.log2, method = "spearman")) %>% hclust(method = "average") %>% as.dendrogram
+dend %>% plot
+
+ddata <- dendro_data(dend)
+labs <- label(ddata)
+class(labs)
+labs_table <- merge(x = labs,y = col_table,by.x="label", by.y ="label_name", sort = F)
+gplot1 <- ggplot(segment(ddata)) +
+    geom_segment(aes(x=x, y=y, xend=xend, yend=yend))
+
+gplot2 <- gplot1 + geom_text(data = labs_table,aes(label=label, x=x, y=0, colour=labs_table$Site.Primary))
+
+gplot2
+gplot1
+
+
+gplot3 <- ggplot(segment(ddata))+
+    geom_segment(aes(x=x, y=y, xend=xend, yend=yend),size=0.1)+
+    geom_text(data = labs_table,aes(label=label, x=x, y=0, colour=labs_table$Site.Primary),hjust=0, size=1.5)+
+    labs(color="originated organs")+
+    coord_flip()+
+    labs(title="Cell line clustering(average)",y="hight")+
+    scale_y_reverse(expand=c(0.2,0))+
+      theme(axis.line.y=element_blank(),
+        axis.ticks.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.title.y=element_blank(),
+        panel.background=element_rect(fill="white"),
+        panel.grid=element_blank())
+
+gplot3
+
+library(gridExtra)
+col_palette <- c(oesophagus="#fe66ec",
+ stomach="#ff6969",
+ small_intestine="#fe984c",
+ large_intestine="ffff3f",
+ pancreas="#4bff4b",
+ liver="#4c8cfe",
+ biliary_tract="#ae85ff")
+
+gplot4 <- ggplot(segment(ddata))+
+    geom_segment(aes(x=x, y=y, xend=xend, yend=yend),size=0.1)+
+    coord_flip()+
+    labs(y="hight")+
+    scale_y_reverse(expand=c(0.2,0))+
+      theme(axis.line.y=element_blank(),
+        axis.ticks.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.title.y=element_blank(),
+        panel.background=element_rect(fill="white"),
+        panel.grid=element_blank(),
+        plot.margin = unit(c(1,-2,1,1),"lines"))
+gplot4
+
+gp1 <- ggplotGrob(gplot4)
+
+gplabel <- ggplot()+
+    geom_tile(data = labs_table,mapping = aes(x=x, y=1,fill=Site.Primary))+
+    labs(fill="originated organs")+
+    coord_flip()+
+    theme(axis.line.y=element_blank(),
+        axis.ticks.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.title.y=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.title.x=element_blank(),
+        panel.background=element_rect(fill="white"),
+        panel.grid=element_blank(),
+        text = element_text(family = "Arial",size=18),
+        plot.margin = unit(c(1,1,1,-2),"lines"))
+
+#gplabel <- gplabel+geom_tile(mapping = aes(fill=factor(x=labs_table$Site.Primary,y=1,fill=factor(labs_table$Site.Primary))),data=labs_table)
+
+gplabel
+
+gp2 <-ggplotGrob(gplabel)
+
+maxheights <- grid::unit.pmax(gp1$heights[2:9], gp2$heights[2:9])
+gp1$heights[2:9] <- as.list(maxheights)
+gp2$heights[2:9] <- as.list(maxheights)
+
+grid.arrange(gp1, gp2, ncol=2)
+require("grid")
+ggp <-grid.arrange(gp1, gp2, ncol=2, top=textGrob("Cell line clustering(average)", gp=gpar(fontsize=20,fontfamily="Arial")),widths=c(2,1))
+
+data <- data.mas5.log2
+meta_data <- data.frame(meta_tg$label_name, meta_tg$Site.Primary,stringsAsFactors = F)
+dist_method="spearman"
+clst_method="average"
+legend_label="legend_label"
+legend_size=18
+main="table_title"
+main_size=22
+font_family="Arial"
+line_size=0.2
+
+Aposi = c(0.78,0.182)
+Bposi = c(0.78,0.86)
+blacket.size = 22
+labes.size = 5
+
+
+dendfunc <- function(data,meta_data,
+                     dist_method="spearman",
+                     clst_method="ward.D2",
+                     line_size=0.2,
+                     legend_label="legend_label",legend_size=18,
+                     main="table_title", main_size=22,
+                     font_family="Arial"){
+    #data is data.frame
+    #   column is samples, row is variables.
+    #meta_data is data.frame of label column + coloring annotation column(variable for fill)
+    #default font is Arial. you need to load Arial if you use it.
+    require(ggplot2)
+    require(grid)
+    require(ggdendro)
+    require(gridExtra)
+    require(gtable)
+    dend <- as.dist(1 - cor(data, method = dist_method)) %>% hclust(method = clst_method) %>% as.dendrogram
+    ddata <- dendro_data(dend)
+    labs <- label(ddata)
+    
+    meta_data[,1] <- as.character(meta_data[,1])
+    meta_data[,2] <- as.character(meta_data[,2])
+    labs_table <- merge(x = labs,y = meta_data,by.x="label", by.y =1, sort = F)
+    
+    gL <- ggplot(segment(ddata))+
+    geom_segment(aes(x=x, y=y, xend=xend, yend=yend),size=line_size)+
+    coord_flip()+
+    labs(y="hight")+
+    scale_y_reverse(expand=c(0.2,0))+
+      theme(axis.line.y=element_blank(),
+        axis.ticks.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.title.y=element_blank(),
+        panel.background=element_rect(fill="white"),
+        panel.grid=element_blank(),
+        text = element_text(family = font_family,size=18),
+        plot.margin = unit(c(1,-2,1,1),"lines"))
+    gp1 <- ggplotGrob(gL)
+    
+    gR <- ggplot()+
+    geom_tile(data = labs_table,
+              mapping = aes_string(x=colnames(labs_table)[2],
+                                   y=1,
+                                   fill=colnames(labs_table)[4]))+
+    labs(fill=legend_label)+
+    coord_flip()+
+    theme(axis.line.y=element_blank(),
+        axis.ticks.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.title.y=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.title.x=element_blank(),
+        panel.background=element_rect(fill="white"),
+        panel.grid=element_blank(),
+        text = element_text(family = font_family,size=18),
+        plot.margin = unit(c(1,1,1,-2),"lines"))
+    gp2 <- ggplotGrob(gR)
+    
+    maxheights <- grid::unit.pmax(gp1$heights[2:9], gp2$heights[2:9])
+    gp1$heights[2:9] <- as.list(maxheights)
+    gp2$heights[2:9] <- as.list(maxheights)
+    
+    grid.arrange(gp1, gp2, ncol=2,
+                 top=textGrob(main, gp=gpar(fontsize=main_size,fontfamily=font_family)),widths=c(2,1))
+
+    }
+
+dend1 <- dendfunc(data = data.mas5.log2,meta_data = meta_data,dist_method = "spearman",clst_method = "average",legend_label = "originated organ",legend_size = 18,main = "Cell line clustering(Average)",main_size = 22,font_family = "Arial",line_size = 0.2)
+
+Aposi <- c(0.78,0.182)
+Bposi <- c(0.78,0.86)
+blacket.size <- 22
+labes.size <- 5
+
+#blacket A
+grid.text(label = "}",x = unit(Aposi[1], "npc"),y = unit(Aposi[2], "npc"),gp = gpar(fontsize=blacket.size,fontfamily=font_family))
+grid.text(label = "A",x = unit(Aposi[1]+0.03, "npc"),y = unit(Aposi[2], "npc"),gp = gpar(fontsize=blacket.size,fontfamily=font_family))
+
+#blacket B
+grid.text(label = "}",x = unit(Bposi[1], "npc"),y = unit(Bposi[2], "npc"),gp = gpar(fontsize=blacket.size+8,fontfamily=font_family))
+grid.text(label = "B",x = unit(Bposi[1]+0.03, "npc"),y = unit(Bposi[2]-0.007, "npc"),gp = gpar(fontsize=blacket.size,fontfamily=font_family))
+```
+
+##color modify-function
+```{r}
+#chr <- "red"
+#sub <- -32
+col_mod <- function(chr,sub = -32){
+    is.color <- function(chr){
+        res <- try(col2rgb(chr), silent = TRUE)
+        return(!"try-error"%in%class(res))
+    }
+    if(is.color(chr)){
+        color_in <- col2rgb(chr)
+        color_in <- color_in + sub
+        color_in <- ifelse(color_in >= 255, 255, color_in)
+        color_in <- ifelse(color_in <= 0, 0, color_in)
+        color_out <- as.hexmode(color_in)
+        color_out <- as.character(color_out)
+        color_out <- paste("#",
+                           color_out[1],color_out[2],color_out[3],sep = "")
+        return(color_out)
+    }else{
+        return("black")
+    }
+}
+
+#col_mod(chr = "red",sub = -32)
+
+col_palette <- c(oesophagus= "#fe66ec",
+ stomach="#ff6969",
+ small_intestine="#fe984c",
+ large_intestine="#ffff3f",
+ pancreas="#4bff4b",
+ liver="#4c8cfe",
+ biliary_tract="#ae85ff")
+col_palette
+
+col_palette2 <- sapply(col_palette, col_mod, +64)
+col_palette2["liver"] <- sapply(col_palette["liver"], col_mod, -32)
+```
+
+
+##additon of color palette
+```{r}
+data <- data.mas5.log2
+meta_data <- data.frame(meta_tg$label_name, meta_tg$Site.Primary,stringsAsFactors = F)
+dist_method="spearman"
+clst_method="average"
+legend_label="Originated Organ"
+legend_size=18
+main=""
+main_size=22
+font_family="Arial"
+line_size=0.2
+
+Aposi = c(0.3,0.2)
+Bposi = c(0.3,0.88)
+char_size = 18
+
+#comment list is list of c(x, y, char, size)
+commentlist <-list(c(Aposi[1], Aposi[2],"}",char_size ),
+                   c(Aposi[1]+0.1, Aposi[2],"A",char_size),
+                   c(Bposi[1], Bposi[2],"}",char_size+2),
+                   c(Bposi[1]+0.1, Bposi[2],"B",char_size))
+commentlist
+
+dendfunc <- function(data,meta_data,
+                     dist_method="spearman",
+                     clst_method="ward.D2",
+                     line_size=0.2,
+                     legend_label="legend_label",legend_size=18,
+                     main="table_title", main_size=22,
+                     font_family="Arial",
+                     Aposi = c(0.78,0.182),
+                     Bposi = c(0.78,0.86),
+                     blacket.size = 22,
+                     labes.size = 5,
+                     commentlist=NULL,
+                     col_palette=NULL){
+    #data is data.frame
+    #   column is samples, row is variables.
+    #meta_data is data.frame of label column + coloring annotation column(variable for fill)
+    #default font is Arial. you need to load Arial if you use it.
+    require(ggplot2)
+    require(grid)
+    require(ggdendro)
+    require(gridExtra)
+    require(gtable)
+    require(magrittr)
+    dend <- as.dist(1 - cor(data, method = dist_method)) %>% hclust(method = clst_method) %>% as.dendrogram
+    ddata <- dendro_data(dend)
+    labs <- label(ddata)
+    
+    meta_data[,1] <- as.character(meta_data[,1])
+    meta_data[,2] <- as.character(meta_data[,2])
+    labs_table <- merge(x = labs,y = meta_data,by.x="label", by.y =1, sort = F)
+    
+    gL <- ggplot(data=segment(ddata))+
+    geom_segment(aes(x=x, y=y, xend=xend, yend=yend),size=line_size)+
+    scale_y_reverse(expand=c(0,0))+
+    scale_x_continuous(expand = c(0,0),limits = range(segment(ddata)$x)+c(-1,1))+
+    coord_flip()+
+    labs(y="hight")+
+     theme(axis.line.y=element_blank(),
+           axis.ticks.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.title.y=element_blank(),
+        panel.background=element_rect(fill="white"),
+        panel.grid=element_blank(),
+        text = element_text(family = font_family,size=18))
+    gp1 <- ggplotGrob(gL)
+    #gL
+    #ggsave("gL.tiff", gL,dpi=300)
+    gp1
+    #class(gp1)
+    #gtable_show_layout(gp1)
+    
+    if (is.null(col_palette)){
+        col_palette <- c(oesophagus= "#fe66ec",
+                         stomach="#ff6969",
+                         small_intestine="#fe984c",
+                         large_intestine="#ffff3f",
+                         pancreas="#4bff4b",
+                         liver="#4c8cfe",
+                         biliary_tract="#ae85ff")
+    }
+    
+    ##factorize label
+    #table(labs_table$meta_tg.Site.Primary)
+    labs_table$"SitePrimaryfactr" <- factor(labs_table$meta_tg.Site.Primary,
+                           levels = c("oesophagus","stomach","small_intestine","large_intestine",
+                                      "liver","pancreas","biliary_tract"))
+    gR <- ggplot()+
+    geom_tile(data = labs_table,
+              mapping = aes_string(x=colnames(labs_table)[2],
+                                   y=1,
+                                   fill=colnames(labs_table)[5]))+
+    scale_x_continuous(expand = c(0,0),limits = range(segment(ddata)$x)+c(-1,1))+
+    scale_fill_manual(values = col_palette)+
+    labs(fill=legend_label)+
+    coord_flip()+
+    theme(axis.line.y=element_blank(),
+        axis.ticks.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.title.y=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.title.x=element_blank(),
+        panel.background=element_rect(fill="white"),
+        panel.grid=element_blank(),
+        text = element_text(family = font_family,size=18)
+        )
+gR
+    gp2 <- ggplotGrob(gR)
+    #gp2 <- ggplot_gtable(ggplot_build(gR))
+    #gtable_show_layout(gp2)
+    gp2
+    #comment addition
+    if(!is.null(commentlist)){
+        bg_layout <- gp2$layout[gp2$layout$name=="background",]
+        bg_t <- bg_layout$t
+        bg_l <- bg_layout$l
+        bg_b <- bg_layout$b
+        bg_r <- bg_layout$r
+        
+        for(i in c(1:length(commentlist))){
+            comment_i <- commentlist[[i]]
+            gcomment_i <- grid.text(label = comment_i[3],
+                                x = unit(comment_i[1], "npc"),
+                                y = unit(comment_i[2], "npc"),
+                                gp = gpar(fontsize=comment_i[4],
+                                          fontfamily=font_family))
+            gp2 <- gtable_add_grob(x=gp2,grobs = gcomment_i,
+                               t = bg_t,
+                               l = bg_l,
+                               b = bg_b,
+                               r = bg_r,
+                               name = paste("additiona_layer",
+                                            i,sep ="_"))
+            print(i)
+        }
+    }
+
+    grid.draw(gp2)
+    gp1
+    gp2
+    grid.newpage()
+    maxheights <- grid::unit.pmax(gp1$heights[2:10],
+                                  gp2$heights[2:10])
+    gp1$heights[2:10] <- as.list(maxheights)
+    gp2$heights[2:10] <- as.list(maxheights)
+    
+    gar <- grid.arrange(gp1, gp2, ncol=2,
+                        top=textGrob(main,
+                        gp=gpar(fontsize=main_size,
+                                fontfamily=font_family)),
+                        widths=c(2,1.4))
+    grid.draw(gar)
+    return(gar)
+}
+
+
+
+Aposi = c(0.3,0.15)
+Bposi = c(0.3,0.955)
+char_size = 22
+
+#comment list is list of c(x, y, char, size)
+commentlist <-list(c(Aposi[1], Aposi[2],"}",char_size ),
+                   c(Aposi[1]+0.1, Aposi[2],"A",char_size),
+                   c(Bposi[1], Bposi[2],"}",char_size+7),
+                   c(Bposi[1]+0.1, Bposi[2],"B",char_size))
+
+
+#tiff(filename = "CCLEclust_newcol.tiff",width = 9,height = 6,units = "cm",res = 300)
+
+dend1 <- dendfunc(data = data.mas5.log2,meta_data = meta_data,dist_method = "spearman",clst_method = "ward.D2",legend_label = "originated organ",legend_size = 18,main = "Cell line clustering(Ward)",main_size = 22,font_family = "Arial",line_size = 0.2,commentlist = NULL)
+
+dend1 <- dendfunc(data = data.mas5.log2,meta_data = meta_data,dist_method = "spearman",clst_method = "average",legend_label = "originated organ",legend_size = 18,main = "",main_size = 22,font_family = "Arial",line_size = 0.2,commentlist = commentlist,col_palette = col_palette2)
+
+
+ggsave(filename = "ccle_celllines_clst_avg.tiff",plot = dend1,width = unit(6.5,"cm"),height = unit(6,"cm"),dpi = 300)
+dend1
+
+
+dev.off()
+
+
+
+```
+
+
+```{r}
+
+dendfunc2 <- function(data,meta_data,
+                     dist_method="spearman",
+                     clst_method="ward.D2",
+                     line_size=0.2,
+                     legend_label="legend_label",legend_size=18,
+                     main="table_title", main_size=22,
+                     font_family="Arial",
+                     Aposi = c(0.78,0.182),
+                     Bposi = c(0.78,0.86),
+                     blacket.size = 22,
+                     labes.size = 5,
+                     commentlist=NULL,
+                     col_palette=NULL){
+    #data is data.frame
+    #   column is samples, row is variables.
+    #meta_data is data.frame of label column + coloring annotation column(variable for fill)
+    #default font is Arial. you need to load Arial if you use it.
+    require(ggplot2)
+    require(grid)
+    require(ggdendro)
+    require(gridExtra)
+    require(gtable)
+    require(magrittr)
+    dend <- as.dist(1 - cor(data, method = dist_method)) %>% hclust(method = clst_method) %>% as.dendrogram
+    ddata <- dendro_data(dend)
+    labs <- label(ddata)
+    
+    meta_data[,1] <- as.character(meta_data[,1])
+    meta_data[,2] <- as.character(meta_data[,2])
+    labs_table <- merge(x = labs,y = meta_data,by.x="label", by.y =1, sort = F)
+    
+    gL <- ggplot(data=segment(ddata))+
+    geom_segment(aes(x=x, y=y, xend=xend, yend=yend),size=line_size)+
+    scale_y_reverse(expand=c(0,0))+
+    scale_x_continuous(expand = c(0,0),limits = range(segment(ddata)$x)+c(-1,1))+
+    coord_flip()+
+    labs(y="hight")+
+     theme(axis.line.y=element_blank(),
+           axis.ticks.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.title.y=element_blank(),
+        panel.background=element_rect(fill="white"),
+        panel.grid=element_blank(),
+        text = element_text(family = font_family,size=18))
+    gp1 <- ggplotGrob(gL)
+    #gL
+    #ggsave("gL.tiff", gL,dpi=300)
+    gp1
+    #class(gp1)
+    #gtable_show_layout(gp1)
+    
+    if (is.null(col_palette)){
+        col_palette <- c(Oesophagus= "#fe66ec",
+                         Stomach="#ff6969",
+                         "Small intestine"="#fe984c",
+                         "Large intestine"="#ffff3f",
+                         Pancreas="#4bff4b",
+                         Liver="#4c8cfe",
+                         "Biliary tract"="#ae85ff")
+        col_palette
+    }
+    
+    ##factorize label
+    #table(labs_table$meta_tg.Site.Primary)
+    labs_table$"SitePrimaryfactr" <- factor(labs_table$meta_tg.Site.Primary,
+                           levels = c("Oesophagus","Stomach","Small intestine","Large intestine",
+                                      "Liver","Pancreas","Biliary tract"))
+    gR <- ggplot()+
+    geom_tile(data = labs_table,
+              mapping = aes_string(x=colnames(labs_table)[2],
+                                   y=1,
+                                   fill=colnames(labs_table)[5]))+
+    scale_x_continuous(expand = c(0,0),limits = range(segment(ddata)$x)+c(-1,1))+
+    scale_fill_manual(values = col_palette)+
+    labs(fill=legend_label)+
+    coord_flip()+
+    theme(axis.line.y=element_blank(),
+        axis.ticks.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.title.y=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.title.x=element_blank(),
+        panel.background=element_rect(fill="white"),
+        panel.grid=element_blank(),
+        text = element_text(family = font_family,size=18),
+        legend.text = element_text(family = font_family,size=legend_size),
+        legend.title = element_text(family = font_family,size=legend_size+1)
+        )
+gR
+    gp2 <- ggplotGrob(gR)
+    #gp2 <- ggplot_gtable(ggplot_build(gR))
+    #gtable_show_layout(gp2)
+    gp2
+    #comment addition
+    if(!is.null(commentlist)){
+        bg_layout <- gp2$layout[gp2$layout$name=="background",]
+        bg_t <- bg_layout$t
+        bg_l <- bg_layout$l
+        bg_b <- bg_layout$b
+        bg_r <- bg_layout$r
+        
+        for(i in c(1:length(commentlist))){
+            comment_i <- commentlist[[i]]
+            gcomment_i <- grid.text(label = comment_i[3],
+                                x = unit(comment_i[1], "npc"),
+                                y = unit(comment_i[2], "npc"),
+                                gp = gpar(fontsize=comment_i[4],
+                                          fontfamily=font_family))
+            gp2 <- gtable_add_grob(x=gp2,grobs = gcomment_i,
+                               t = bg_t,
+                               l = bg_l,
+                               b = bg_b,
+                               r = bg_r,
+                               name = paste("additiona_layer",
+                                            i,sep ="_"))
+            print(i)
+        }
+    }
+
+    grid.draw(gp2)
+    gp1
+    gp2
+    grid.newpage()
+    maxheights <- grid::unit.pmax(gp1$heights[2:10],
+                                  gp2$heights[2:10])
+    gp1$heights[2:10] <- as.list(maxheights)
+    gp2$heights[2:10] <- as.list(maxheights)
+    
+    gar <- grid.arrange(gp1, gp2, ncol=2,
+                        top=textGrob(main,
+                        gp=gpar(fontsize=main_size,
+                                fontfamily=font_family)),
+                        widths=c(2.1,1.1))
+    grid.draw(gar)
+    return(gar)
+}
+
+require(dplyr)
+meta_data1 <- meta_data %>% 
+    dplyr::mutate(meta_tg.Site.Primary = str_replace(meta_tg.Site.Primary, "_", " ")) %>%
+    dplyr::mutate(meta_tg.Site.Primary = str_replace(meta_tg.Site.Primary, "^[a-z]", toupper))
+
+col_palette3 <- col_palette2 
+names(col_palette3) <- names(col_palette3) %>%
+    str_replace(., "_"," ") %>%
+    str_replace(., "^[a-z]", toupper)
+    
+col_palette3
+
+dend_re <- dendfunc2(data = data.mas5.log2,meta_data = meta_data1,dist_method = "spearman",clst_method = "average",legend_label = "Originated organ",legend_size = 18,main = "",main_size = 1,font_family = "Arial",line_size = 0.4,commentlist = commentlist,col_palette = col_palette3)
+
+dend_re
+
+
+ggsave(filename = "ccle_celllines_clst_avg_re.tiff",plot = dend_re,width = unit(9,"cm"),dpi = 300)
+
+
+dev.off()
+
+```
+
+
+##ward method
+```{r}
+dend <- as.dist(1 - cor(data.mas5.log2, method = "spearman")) %>% hclust(method = "ward.D2") %>% as.dendrogram
+dend %>% plot
+
+ddata <- dendro_data(dend)
+labs <- label(ddata)
+class(labs)
+labs_table <- merge(x = labs,y = col_table,by.x="label", by.y ="label_name", sort = F)
+gplot1 <- ggplot(segment(ddata)) +
+    geom_segment(aes(x=x, y=y, xend=xend, yend=yend))
+
+gplot2 <- gplot1 + geom_text(data = labs_table,aes(label=label, x=x, y=0, colour=labs_table$Site.Primary))
+
+gplot2
+gplot1
+
+
+gplot3 <- ggplot(segment(ddata))+
+    geom_segment(aes(x=x, y=y, xend=xend, yend=yend),size=0.1)+
+    geom_text(data = labs_table,aes(label=label, x=x, y=0, colour=labs_table$Site.Primary),hjust=0, size=1.5)+
+    labs(color="originated organs")+
+    coord_flip()+
+    labs(title="Cell line clustering(ward)",y="hight")+
+    scale_y_reverse(expand=c(0.2,0))+
+      theme(axis.line.y=element_blank(),
+        axis.ticks.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.title.y=element_blank(),
+        panel.background=element_rect(fill="white"),
+        panel.grid=element_blank())
+
+gplot3
+
+dendfunc(data = data.mas5.log2,meta_data = meta_data,dist_method = "spearman",clst_method = "ward.D2",legend_label = "originated organ",legend_size = 18,main = "Cell line clustering(Ward)",main_size = 22,font_family = "Arial",line_size = 0.2)
+
+```
+
+
+
+##sessioninfo
+```{r}
+sessionInfo()
+Sys.time()
+```
+

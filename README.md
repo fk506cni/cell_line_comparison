@@ -5,9 +5,6 @@ Starting materials such as "CCLE_Expression.Arrays_2013-03-18.tar.gz" are not de
 Please get them from Broad Institute, TCGA, NCBI GEO and so on.  
 
 
-citation: xx
-
-
 Description of each file and the purpose.
 
 - 77GEarray_re 
@@ -16,11 +13,6 @@ Description of each file and the purpose.
 - 87_2garray_re_mod
     - Clustering in liver cancer cell lines.
     - DEG analysis in liver cancer cell line cluster.
-
-
-- 137PCA_renormalize_redo
-    - Comparison of expression pattern using Primary Cell Atlas
-    - Clustering in liver cancer cell lines
 
 - 145cell_establish_rep
     - Comparison of cell line establishment reports.
@@ -32,13 +24,20 @@ Description of each file and the purpose.
     - Expression pattern analysis using TCGA HCC cohort
 
 - 157clin_clust_anals_mod
-    - Analysis clinical sample cluster 1
+    - Analysis clinical sample cluster
 
 - R174_cln_clst_re
-    - Analysis clinical sample cluster 2
+    - Analysis clinical sample cluster
 
 - R176_clin_clst_expanal_re_mod
-    - Analysis clinical sample cluster 3
+    - Analysis clinical sample cluster
+
+- 137PCA_renormalize_redo
+    - Comparison of expression pattern using Primary Cell Atlas
+    - Clustering in liver cancer cell lines
+
+- 150compare_FB_mod2
+    - Comparison CCLE cell lines by Fibroblast representitive vector
 
 - 81emt_cntr
     - expression check of EMT
@@ -51,9 +50,6 @@ Description of each file and the purpose.
 - 83emt_cnt_GSE74996
     - expression check of EMT
     - GSE74996
-
-- 150compare_FB_mod2
-    - Comparison CCLE cell lines by Fibroblast representitive vector
 
 - R387_hcc_tcga_gsva
     - GSVA analysis in TCGA HCC RNA seq data
