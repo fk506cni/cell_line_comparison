@@ -1,0 +1,18 @@
+TY  - STD
+AU  - Therneau, Terry M.
+PY  - 2015//
+TI  - A Package for Survival Analysis in S
+UR  - https://CRAN.R-project.org/package=survival
+N1  - version 2.38
+ID  - survival-package
+ER  - 
+TY  - BOOK
+AU  - Therneau, Terry M.
+AU  - Grambsch, Patricia M.
+PY  - 2000//
+TI  - Modeling Survival Data: Extending the Cox Model
+PB  - Springer
+CY  - New York
+SN  - 0-387-98784-3
+ID  - survival-book
+ER  - 

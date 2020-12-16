@@ -1,0 +1,20 @@
+TY  - JOUR
+AU  - Tang, Yuan
+AU  - Horikoshi, Masaaki
+AU  - Li, Wenxuan
+PY  - 2016//
+TI  - ggfortify: Unified Interface to Visualize Statistical Result of Popular R Packages
+JO  - The R Journal
+VL  - 8
+IS  - 2
+UR  - https://journal.r-project.org/
+ID  - Tang2016
+ER  - 
+TY  - STD
+AU  - Horikoshi, Masaaki
+AU  - Tang, Yuan
+PY  - 2018//
+TI  - ggfortify: Data Visualization Tools for Statistical Analysis Results
+UR  - https://CRAN.R-project.org/package=ggfortify
+ID  - Horikoshi2018
+ER  - 

@@ -1,0 +1,753 @@
+---
+title: "157clin_clust_anals"
+author: "fkeita"
+date: "2018/3/22"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup}
+knitr::opts_chunk$set(echo = TRUE, cache = TRUE,cache.lazy = FALSE, echo=TRUE)
+# source("http://bioconductor.org/biocLite.R")
+require("stringr")
+require("tidyverse")
+require("MASS")
+# require("ggplot2")
+# require("dplyr")
+# require("magrittr")
+require(extrafont)
+loadfonts(quiet = T)
+
+#biocLite("GEOquery")
+##require(GEOquery)
+
+set.seed("20180321")
+```
+
+
+## functions
+```{r}
+outputdir <- "./figs/"
+
+ggsave2 <- function(plot, wid=9, hei=9){
+  plot_name <- deparse(substitute(plot))
+  file_name <- paste(outputdir,plot_name, ".png", sep = "",collapse = "")
+  ggsave(filename = file_name,plot = plot,device = "png",width = wid, height = hei,dpi = 300,units = "cm")
+}
+
+ggsave2_pdf <- function(plot, wid=9, hei=9){
+  plot_name <- deparse(substitute(plot))
+  file_name <- paste(outputdir,plot_name, ".pdf", sep = "",collapse = "")
+  ggsave(filename = file_name,plot = plot,device = "pdf",width = wid, height = hei,dpi = 300,units = "cm")
+}
+
+
+
+ggsave2_f <- function(plot,path, wid=9, hei=9){
+  plot_name <- deparse(substitute(plot))
+  file_name <- path
+    # paste(outputdir, plot_name, ".tif", sep = "",collapse = "")
+  ggsave(filename = file_name,plot = plot,device = "tiff",width = wid, height = hei,dpi = 300,units = "cm")
+}
+
+ggsave3 <- function(plot, path, wid=8.2, hei=8.2){
+  #plot_name <- deparse(substitute(plot))
+  plot_name <- path
+  file_name <- path
+  # file_name <- paste(plot_name, ".png", sep = "",collapse = "")
+  ggsave(filename = file_name,plot = plot,device = "png",width = wid, height = hei,dpi = 600,units = "cm")
+}
+
+df_all_chr <- function(df){
+  for (i in c(1, ncol(df))){
+    df[[i]] <- as.character(df[[i]])
+  }
+  return(df)
+}
+
+theme_ggh <- function(font.size=10,legend.position = "none", fam = "Arial") {
+  theme(axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.title = element_blank(),
+        axis.line = element_blank(),
+        axis.ticks = element_blank(),
+        plot.title = element_blank(),
+        panel.grid = element_blank(),
+        panel.border = element_blank(),
+        panel.spacing = element_blank(),
+        panel.background = element_blank(),
+        plot.background = element_blank(),
+        plot.margin = unit(c(0,0,0,0),"cm"),
+        text = element_text(family = fam ,size=font.size,lineheight = 0.7)
+        # ,
+        # legend.position = "none")
+  )
+}
+
+inch2cm <- function(x){
+  return(x/0.39370)
+}
+cm2inch <- function(x){
+  return(0.39370*x)
+}
+
+p2cm <- function(x){
+  return(as.integer(0.008466666666666667 * x))
+}
+
+cm2p <- function(x){
+  return(as.integer(118.11023622047244 *x))
+}
+
+ggsave2_pptx <- function(plot, wid=9, hei=9){
+  
+  library(officer)
+  library(rvg)
+  
+  plot_name <- deparse(substitute(plot))
+  file_name <- paste(outputdir,plot_name, ".pptx", sep = "",collapse = "")
+  plot_ed <- rvg::dml(ggobj = plot,width = wid, height = hei)
+  
+  doc <- read_pptx() %>%
+    add_slide('Title and Content', 'Office Theme') %>%
+    ph_with(value = "", location = ph_location_type(type = "title")) %>%
+    ph_with(value = plot_ed, location = ph_location(type = "body",width = cm2inch(wid), height = cm2inch(hei),left = 2, top = 2))
+  doc %>%
+    print(target = file_name)
+}
+
+
+ggsave3_pptx <- function(plot, file_name, wid=9, hei=9){
+  
+  library(officer)
+  library(rvg)
+  
+  # plot_name <- deparse(substitute(plot))
+  # file_name <- paste("../figs_output/",plot_name, ".pptx", sep = "",collapse = "")
+  # file_name <- paste(file_name, ".pptx", sep = "",collapse = "")
+  plot_ed <- rvg::dml(ggobj = plot,width = wid, height = hei)
+  
+  doc <- read_pptx() %>%
+    add_slide('Title and Content', 'Office Theme') %>%
+    ph_with(value = "", location = ph_location_type(type = "title")) %>%
+    ph_with(value = plot_ed, location = ph_location(type = "body",width = cm2inch(wid), height = cm2inch(hei),left = 2, top = 2))
+  doc %>%
+    print(target = file_name)
+}
+
+
+
+#paste and print
+pp <- function(..., sep= "", rtn = FALSE){
+  s <- paste(..., sep = sep)
+  if(rtn){
+    return(s)
+  }else{
+    cat(s)
+  }
+}
+
+# -の表現ブレ問題
+coerceNeg <- function(v){
+  v <- v %>%
+    str_remove_all(., "\\(") %>%
+    str_remove_all(., "\\)") %>%
+    str_replace(., "－", "-")
+  v2 <- case_when(
+    v == "+" ~ "pos",
+    v == "-" ~ "neg",
+    v == "ー"~ "neg",
+    v == "‑" ~ "neg",
+    v == "‐" ~ "neg",
+    v == "–" ~ "neg",
+    v == "—" ~ "neg",
+    v == "―" ~ "neg",
+    v == "ｰ" ~ "neg",
+    v == "−" ~ "neg",
+    v == "－" ~ "neg",
+    T ~ NA_character_)
+  return(v2)
+}
+
+
+showFigMkdwn <- function(path, wid =6, hei = 9){
+  wid <- as.character(cm2p(wid))
+  # wid <- as.character(pcnt)
+  # hei <- cm2p(hei)
+  # pp("![](",path, " =",wid,"x)")
+  # pp("<img src=\"", filepath())
+  # pp("<img src=", path, " width=\"", wid, "\"/>")
+  pp("<img src=", path, " width=", wid, "/>")
+  # pp("<img src=", path, " width=\"", pcnt, "%\"/>")
+  # <img src="drawing.jpg" alt="drawing" width="200"/>
+}
+showFigMkdwn("path2hell")
+
+
+
+get_Coefs <- function(m){
+  m <-  summary(m)$coefficients %>%
+  as.data.frame() %>%
+  mutate(val = rownames(.),
+         or = exp(`Estimate`),
+           or_low =exp(`Estimate` -1.96*`Std. Error`),
+           or_high = exp(`Estimate` +1.96*`Std. Error`)) %>%
+  mutate(or_str = or %>%
+           round(., digits = 2) %>%
+           as.character(),
+         or_low_str = or_low %>%
+           round(., digits = 2) %>%
+           as.character(),
+         or_high_str = or_high %>%
+           round(., digits = 2) %>%
+           as.character()) %>%
+  mutate(or_ci = str_c(or_str,
+                       "(",
+                       or_low_str,
+                       "-",
+                       or_high_str,
+                       ")")) %>%
+  mutate(p_val_str = case_when(
+    `Pr(>|z|)` < 0.01 ~ "<0.01",
+    `Pr(>|z|)` < 0.1 ~ as.character(round(`Pr(>|z|)`, digits = 3)),
+    T ~as.character(round(`Pr(>|z|)`, digits = 2))
+  ))  %>%
+  dplyr::select(val,
+                or_ci,
+                p_val_str,
+                everything())
+  return(m)
+}
+```
+
+
+
+
+```{r}
+df <- read.csv(file = "./clst_clin2_R126.csv",header = T,sep = ",",stringsAsFactors = F)
+
+name_tag <- df %>%
+  sapply(., FUN = function(x){sum(!is.na(x))}) != 0
+
+df <- df[,name_tag]
+
+#colnames(df)[str_detect(colnames(df),"grade")]
+
+write.table(x = t(df), file = "R126_clst_clin2.tsv",quote = F, sep = "\t",row.names = T, col.names = NA)
+```
+
+
+```{r}
+var1 <- df$clst_result
+var2 <- df$patient.days_to_birth
+var2
+gg2var <- function(var1, var2){
+  require(ggplot2)
+  
+  var1_name <- deparse(substitute(var1))
+  var2_name <- deparse(substitute(var2))
+  df4gg <- data.frame(category = as.factor(var1), asses_var=var2)
+
+  p1 <- ggplot()+
+    geom_boxplot(data = df4gg, mapping = aes(x = category,y=asses_var),outlier.colour = NA)+
+    geom_jitter(data = df4gg, mapping = aes(x = category,y=asses_var), size=0.5, color="red")+
+    xlab(var1_name)+ylab(var2_name)+
+    theme_classic(base_size = 14,base_family = "Arial")+
+    theme(axis.text=element_text(size=12),
+          axis.title=element_text(size=14,face="bold"))
+  return(p1)
+}
+
+gg2var(var1, var2)
+gg2var(df$clst_result, df$patient.days_to_death)
+
+gg2var(df$clst_result, df$patient.days_to_last_followup)
+gg2var(df$clst_result, log(df$patient.fetoprotein_outcome_value+1))
+gg2var(df$clst_result, df$patient.prothrombin_time_result_value)
+gg2var(df$clst_result, log(df$patient.prothrombin_time_result_value)+1)
+table(df$clst_result, df$patient.stage_event.pathologic_stage)
+table(df$clst_result, df$patient.gender)
+table(df$clst_result, df$patient.child_pugh_classification_grade)
+table(df$clst_result, df$patient.histological_type)
+table(df$clst_result, df$patient.neoplasm_histologic_grade)
+```
+
+```{r}
+df_fac2chr <- function(df){
+  df <- as.data.frame(df)
+  for(i in c(1:ncol(df))){
+    df[,i] <- as.character(df[,i])
+  }
+  return(df)
+}
+```
+
+
+```{r}
+#clin <- read.table(file = "./gdac.broadinstitute.org_LIHC.Merge_Clinical.Level_1.2016012800.0.0/LIHC.clin.merged.txt",header = F,sep = "\t",quote = "",stringsAsFactors = F)
+
+clin <- read.table(file = "./gdac.broadinstitute.org_LIHC.Clinical_Pick_Tier1.Level_4.2016012800.0.0/LIHC.clin.merged.picked.txt", header = T, row.names = 1,sep = "\t",stringsAsFactors = F) %>%
+  t() %>%
+  df_fac2chr() %>%
+  `rownames<-`(toupper(rownames(.))) %>%
+  `rownames<-`(str_replace_all(rownames(.), "\\.", "\\-"))
+
+df2 <- df %>%
+  dplyr::select("Row.names", "clst_result") 
+
+dat <- merge(x = df2, y = clin, by.x="Row.names", by.y=0)
+
+DT::datatable(data = dat, caption = "clst and clindata")
+
+```
+
+```{r}
+dat <- dat %>%
+  filter(!is.na(days_to_death) | !is.na(days_to_last_followup)) %>%
+  mutate(days_to_death = 
+           as.numeric(ifelse(is.na(days_to_death), 0, days_to_death))) %>%
+  mutate(days_to_last_followup =
+           as.numeric(ifelse(is.na(days_to_last_followup), 0, days_to_last_followup))) %>%
+  mutate(vital_status = as.numeric(vital_status)) %>%
+  mutate(time = pmax(days_to_death, days_to_last_followup))
+
+summary(dat)
+```
+
+```{r}
+ggsave2 <- function(plot, wid=9, hei=9){
+  plot_name <- deparse(substitute(plot))
+  file_name <- paste(plot_name, ".tiff", sep = "",collapse = "")
+  ggsave(filename = file_name,plot = plot,device = "tiff",width = wid, height = hei,dpi = 300,units = "cm")
+}
+```
+
+
+```{r}
+require(survival)
+var <- "var"
+exvar <- "clst_result"
+
+dat <- dat %>%
+  mutate(!!var := clst_result)
+
+d.survfit <- survival::survfit(survival::Surv(time, vital_status) ~ var,
+                               data = dat)
+cp <- survival::coxph(survival::Surv(time, vital_status) ~ var,
+                               data = dat)
+
+summary(cp)
+
+plot(d.survfit)
+fortify.survfit <- function(survfit.data) {
+  data.frame(time = survfit.data$time,
+             n.risk = survfit.data$n.risk,
+             n.event = survfit.data$n.event,
+             n.censor = survfit.data$n.censor,
+             surv = survfit.data$surv,
+             std.err = survfit.data$std.err,
+             upper = survfit.data$upper,
+             lower = survfit.data$lower,
+             strata = rep(names(survfit.data$strata), survfit.data$strata))
+}
+
+svdat <- fortify.survfit(survfit.data = d.survfit)
+
+svplot <- ggplot()+theme_classic()+
+  geom_line(aes_string(x = 'time', y = 'surv', color = "strata"), data = svdat)
+svplot
+
+ggsave2(svplot)
+
+#install.packages('ggfortify')
+require(ggfortify)
+
+pt <- autoplot(d.survfit,conf.int = F) +theme_classic(base_size = 14,base_family = "Arial")+
+  scale_color_hue(name="Cluster", labels=c("1" = "Major", "2" = "Minor"))+
+  xlab("Follow up days")+ylab("Survival")
+pt
+ggsave2(pt, wid = 18)
+
+
+
+```
+
+
+```{r}
+# install.packages("survminer")
+require("survminer")
+pt_all <- ggsurvplot(d.survfit, risk.table.height = 0.25, risk.table = T,
+                  ggtheme = theme_pubr(), legend.labs = c("Major", "Minor"))
+# +scale_color_hue(name="Cluster", labels=c("1" = "Major", "2" = "Minor"))+
+#   xlab("Follow up days")+ylab("Survival")
+
+pt_bind <- cowplot::plot_grid(pt_all$plot,
+                               pt_all$table,ncol = 1,rel_heights = c(2,1))
+pt_bind
+ggsave2_f(plot = pt_bind, path = "R157_mod_pt_survival_allT.tif", wid = 12, hei=12)
+```
+
+
+```{r}
+dat_t234 <- dat %>%
+  mutate(pT = str_remove(pathology_T_stage, "[abc]*$") %>%
+           ifelse(.=="tx", NA, .) %>%
+           as.factor()) %>%
+  filter(pT != "t1") %>%
+  filter(!is.na(pT)) %>%
+  filter(!is.na(days_to_death) | !is.na(days_to_last_followup)) %>%
+  mutate(days_to_death = 
+           as.numeric(ifelse(is.na(days_to_death), 0, days_to_death))) %>%
+  mutate(days_to_last_followup =
+           as.numeric(ifelse(is.na(days_to_last_followup), 0, days_to_last_followup))) %>%
+  mutate(vital_status = as.numeric(vital_status)) %>%
+  mutate(time = pmax(days_to_death, days_to_last_followup)) %>%
+  mutate(!!var := clst_result)
+
+d.survfit_t234 <- survival::survfit(survival::Surv(time, vital_status) ~ var,
+                               data = dat_t234)
+
+cp_t234 <- survival::coxph(survival::Surv(time, vital_status) ~ var,
+                               data = dat_t234)
+summary(cp_t234)
+
+
+pt_t234 <- autoplot(d.survfit_t234,conf.int = F) +theme_classic(base_size = 14,base_family = "Arial")+
+  scale_color_hue(name="Cluster", labels=c("1" = "Major\nT2~4", "2" = "Minor"))+
+  xlab("Follow up days")+ylab("Survival")
+pt_t234
+# ggsave2(pt_t234, wid = 18)
+```
+
+
+
+
+```{r}
+# install.packages("survminer")
+require("survminer")
+pt2 <- ggsurvplot(d.survfit_t234, risk.table.height = 0.25, risk.table = T,
+                  ggtheme = theme_pubr(), legend.labs = c("Major\nT2~T4", "Minor"))
+# +scale_color_hue(name="Cluster", labels=c("1" = "Major", "2" = "Minor"))+
+#   xlab("Follow up days")+ylab("Survival")
+
+pt2_bind <- cowplot::plot_grid(pt2$plot,
+                               pt2$table,ncol = 1,rel_heights = c(2,1))
+pt2_bind
+ggsave2_f(plot = pt2_bind, path = "R157_mod_pt_survival.tif", wid = 12, hei=12)
+```
+
+
+
+```{r}
+cp_zph <- cox.zph(cp)
+cp_zph
+
+plot(cp_zph)
+km <- survfit(cp)
+plot(km)
+
+
+km <- survival::survfit(survival::Surv(time, vital_status) ~ var,
+                               data = dat)
+plot(km)
+
+
+lr_km <- survdiff(survival::Surv(time, vital_status) ~ var,
+                               data = dat)
+lr_km
+
+```
+
+```{r}
+dat2 <- merge(x = df2, y = clin, by.x="Row.names", by.y=0) %>%
+  mutate(pT = str_remove(pathology_T_stage, "[abc]*$") %>%
+           ifelse(.=="tx", NA, .) %>%
+           as.factor())
+
+```
+
+
+```{r}
+
+clst <- "clst_result"
+key <- "pathology_T_stage"
+key <- "pT"
+
+setNA2Zero <- function(vec){
+  vec0 <- ifelse(is.na(vec), 0, vec)
+  return(vec0)
+}
+
+setNA2Emp <- function(vec){
+  vec0 <- ifelse(is.na(vec), "", vec)
+  return(vec0)
+}
+
+
+clstInts2Strs <- function(vec){
+  int2str <- function(num){
+    if(num ==1){
+      return("Major")
+    }else if(num ==2){
+      return("Minor")
+    }else{
+      return("Unknown")
+    }
+  }
+  
+  strvec <- sapply(vec, int2str)
+  return(strvec)
+}
+
+#clstInts2Strs(dat$clst_result)
+#clstInts2Strs(dat[[clst]])
+
+
+getMat <- function(dat, clst = "clst_result", key){
+  d <- dat %>%
+    dplyr::filter(!is.na(.[[clst]])) %>%
+    dplyr::select(one_of(c(clst, key))) %>%
+    dplyr::mutate(!!clst := clstInts2Strs(.[[clst]]))
+  
+  smr <- d %>%
+    mutate(count = 1) %>%
+    group_by_(clst, key) %>%
+    summarise(count = sum(count))
+  
+  mt <- smr %>%
+    tidyr::spread_(key = key, value = "count") %>%
+    purrr::map_at(.at = c(2:(ncol(.))), setNA2Zero) %>%
+    as.data.frame() %>%
+    `rownames<-`(.[[clst]]) %>%
+    dplyr::select(-matches(clst)) %>%
+    t()
+  
+  #    dplyr::select(-ends_with("NA.")) %>%
+  
+  return(mt)
+}
+
+trimLastNARow <- function(mat){
+  lastname <- rownames(mat) %>%
+    .[length(.)]
+  if(str_detect(lastname, "NA")){
+    mat <- mat %>%
+      .[c(1:nrow(.) -1),]
+  }else{
+    print("NA row not detected.")
+  }
+  return(mat)
+}
+
+colnames(dat2)
+
+# key <- "pT"
+# mat <- getMat(dat2, key = key)
+# 
+# DT::datatable(data = mat, caption = key)
+# mat <- trimLastNARow(mat)
+# getChiseqFish <- function(mat){
+#   print(chisq.test(mat))
+#   print(fisher.test(mat))
+# }
+# 
+# getChiseqFish(mat)
+```
+
+
+```{r}
+getChiseqFish <- function(mat){
+  print(chisq.test(mat))
+  print(fisher.test(mat))
+}
+
+
+checkLab_I <- function(dat, i, get_bool =F){
+  key_i <- colnames(dat)[i]
+  print(paste("analysing label: ", key_i, sep=""))
+  mat_i <- getMat(dat, key = key_i)
+  print(htmltools::tagList(
+    DT::datatable(data = mat_i, caption = key_i)
+  ))
+  getChiseqFish(mat_i)
+  #return(mat_i)
+  if(get_bool){
+    return(mat_i)
+  }
+}
+
+
+# key <- colnames(dat2)[]
+# mat <- getMat(dat2, key = key)
+# DT::datatable(data = mat, caption = key)
+# getChiseqFish(mat)
+```
+
+```{r results="asis"}
+i <- 21
+cap <- colnames(dat2)[i]
+mt <- checkLab_I(dat2, i,get_bool = T)
+
+```
+
+
+
+```{r results="asis"}
+i <- 11
+cap <- colnames(dat2)[i]
+mt <- checkLab_I(dat2, i,get_bool = T)
+```
+
+```{r results="asis"}
+i <- 12
+cap <- colnames(dat2)[i]
+mt <- checkLab_I(dat2, i,get_bool = T)
+```
+
+
+```{r results='asis'}
+i <- 13
+cap <- colnames(dat2)[i]
+mt <- checkLab_I(dat2, i,get_bool = T)
+```
+
+
+```{r results='asis'}
+i <- 16
+cap <- colnames(dat2)[i]
+mt <- checkLab_I(dat2, i,get_bool = T)
+```
+
+
+```{r results='asis'}
+i <- 18
+cap <- colnames(dat2)[i]
+mt <- checkLab_I(dat2, i,get_bool = T)
+```
+
+```{r results='asis'}
+i <- 19
+cap <- colnames(dat2)[i]
+mt <- checkLab_I(dat2, i,get_bool = T)
+```
+
+
+```{r results='asis'}
+i <- 20
+cap <- colnames(dat2)[i]
+mt <- checkLab_I(dat2, i,get_bool = T)
+```
+
+
+
+```{r}
+getI <- function(vec, i){
+  return(vec[i])
+}
+
+multiRep <- function(x, pairs, unmatch = ""){
+  # x
+  # pairs is list of pair vector
+  #stopifnot(length(pairs != 0))
+  pre <- lapply(pairs, getI, i=1) %>%
+    unlist()
+  after <- lapply(pairs, getI, i=2) %>%
+    unlist()
+  ind <- match(x, pre)
+  return(ifelse(is.na(ind), unmatch, after[ind]))
+}
+
+apedl <- function(l, c1, c2){
+  l <- append(l, list(c(c1, c2)))
+  return(l)
+}
+
+pairs <- list() %>%
+  apedl("t2nxmx", "stage ii") %>%
+  apedl("t1nxmx", "stage i") %>%
+  apedl("t3nxmx", "stage iiia") %>%
+  apedl("t4nxmx", "stage iiib") %>%
+  apedl("t3anxm0", "stage iiia")
+
+
+dat2 <- dat2 %>%
+  mutate(pT = setNA2Emp(pathology_T_stage)) %>%
+  mutate(pN = setNA2Emp(pathology_N_stage)) %>%
+  mutate(pM = setNA2Emp(pathology_M_stage)) %>%
+  mutate(stage4 = setNA2Emp(pathologic_stage)) %>%
+  mutate(TNM = str_c(pT, pN, pM, sep="")) %>%
+  mutate(stage4 = ifelse(stage4 =="", 
+                         multiRep(TNM, pairs = pairs),
+                         stage4) %>%
+           str_remove_all("stage ") %>%
+           str_remove_all("[abc]*$") %>%
+           ifelse(. =="", NA, .))
+
+
+colnames(dat2)
+```
+
+```{r results='asis'}
+i <- 24
+cap <- colnames(dat2)[i]
+mt <- checkLab_I(dat2, i,get_bool = T)
+```
+
+
+
+
+##sessioninfo
+```{r}
+sessionInfo()
+Sys.time()
+Sys.info()
+```
+
+##function for save attached pkgs from sessioninfo
+```{r}
+ses2ris <- function(dir="./ses_ris", ver=T){
+  require("magrittr")
+  require("stringr")
+ 
+  if(!file.exists(dir)){
+    dir.create(dir)
+  }
+ 
+  end_out <- function(pac, ver, dir){
+    pac_ver <- packageVersion(pac)
+ 
+    if(ver){
+      out_file <- paste(pac, "_", pac_ver, ".ris",sep = "")
+    }else{
+      out_file <- paste(pac, ".ris",sep = "")
+    }
+    print(out_file)
+ 
+    ##pac_cit <- utils:::print.bibentry(citation(pac), style = "Bibtex")
+    pac_cit <- print(citation(pac),bibtex=TRUE)
+ 
+    double_q <- "\""
+    if(!is.na(pac_cit[1]$title)){
+      pac_cit[1]$title <- str_replace(pac_cit[1]$title, "---", ":")
+      pac_cit[1]$title <- str_replace_all(pac_cit[1]$title, "\\'", double_q)
+    }
+
+    capture.output(toBibtex(pac_cit),file = "tmp.bib")
+   
+    sys_code <- paste("bib2xml tmp.bib | xml2ris  > ", dir, "/", out_file, sep="")
+    print(sys_code)
+    system(sys_code)
+  }
+ 
+  pacs <- sessionInfo() %>%
+    .$otherPkgs %>%
+    names(.)
+  print(pacs)
+  sapply(X = pacs, FUN = end_out, ver=ver, dir=dir)
+ 
+  file.remove("./tmp.bib")
+}
+
+ses2ris()
+```

@@ -1,0 +1,908 @@
+---
+title: "R176_clin_clst_expanal_re"
+author: "fkeita"
+date: "2018/10/3"
+output: html_document
+---
+
+```{r setup}
+knitr::opts_chunk$set(echo = TRUE, cache = TRUE,cache.lazy = FALSE, echo=TRUE)
+# source("http://bioconductor.org/biocLite.R")
+require("stringr")
+require("tidyverse")
+require("MASS")
+# require("ggplot2")
+# require("dplyr")
+# require("magrittr")
+require(extrafont)
+loadfonts(quiet = T)
+
+set.seed("20180927")
+
+require(data.table)
+```
+
+```{r}
+df_fac2chr <- function(df){
+  df <- as.data.frame(df)
+  for(i in c(1:ncol(df))){
+    df[,i] <- as.character(df[,i])
+  }
+  return(df)
+}
+
+df_fac2num <- function(df){
+  df <- as.data.frame(df)
+  for(i in c(1:ncol(df))){
+    df[,i] <- as.numeric(as.character(df[,i]))
+  }
+  return(df)
+}
+
+
+
+
+filter_i <- function(df, cond){
+  #cond should be below.
+  #boolean vector(T, F, T, F, ...)
+  #index vector (1, 3, 5, 2) or (-2, -4, -5)
+  #index only 1, 5, -3, -3
+  require(dplyr)
+  df <- df %>%
+    as.data.frame() %>%
+    mutate(row_name_ = rownames(.)) %>%
+    mutate(hidden_index = c(1:nrow(.))) 
+
+  
+  if(is.logical(cond)){
+    stopifnot(length(cond) == nrow(df))
+    
+    cond_pos <- c(1:nrow(df))[cond]
+    df <- df %>%
+      dplyr::filter(hidden_index %in% cond_pos)
+  }else if(is.numeric(cond)){
+    sum_bool <- sum(cond > 0)
+    stopifnot(sum_bool == 0 | sum_bool == length(cond))
+    
+    cond <- abs(cond)
+    if(sum_bool == length(cond)){
+      df <- df %>%
+        dplyr::filter(hidden_index %in% cond)
+    }else if(sum_bool == 0){
+      df <- df %>%
+        dplyr::filter(!hidden_index %in% cond)
+    }
+  }
+  
+  df <- df %>%
+    as.data.frame() %>%
+    `rownames<-`(.[["row_name_"]]) %>%
+    dplyr::select( -row_name_, -hidden_index)
+  
+  return(df)
+}
+```
+
+```{r}
+target_dis <- "LIHC"
+q_value_cuttoff <- 0.0001
+#q_value_cuttoff <- 0.01
+```
+
+```{r}
+g2_origin <- fread(file = "./2Garray.annot_2.txt",sep="\t", stringsAsFactors = F)
+
+# rna_origin <- fread(file = "./gdac.broadinstitute.org_LIHC.Merge_rnaseqv2__illuminahiseq_rnaseqv2__unc_edu__Level_3__RSEM_genes_normalized__data.Level_3.2016012800.0.0/LIHC.rnaseqv2__illuminahiseq_rnaseqv2__unc_edu__Level_3__RSEM_genes_normalized__data.data.txt",sep = "\t", stringsAsFactors = F)
+
+rna_origin <- fread(file = "./LIHC.rnaseqv2__illuminahiseq_rnaseqv2__unc_edu__Level_3__RSEM_genes_normalized__data.data.txt",sep = "\t", stringsAsFactors = F)
+
+clin_origin <- fread(file = "./clst_clin2.csv", sep = ",", stringsAsFactors = F) %>%
+  dplyr::select(2:3) %>%
+  as.data.frame()
+
+clin_pick <- read.table(file = "gdac.broadinstitute.org_LIHC.Clinical_Pick_Tier1.Level_4.2016012800.0.0/LIHC.clin.merged.picked.txt", header = T, row.names = 1,sep = "\t",stringsAsFactors = F) %>%
+  t() %>%
+  df_fac2chr() %>%
+  `rownames<-`(toupper(rownames(.)) %>%
+                 str_replace_all(., "\\.", "\\-"))
+
+
+
+```
+
+```{r}
+# colnames(rna_origin)[1]
+
+rna <- rna_origin %>%
+  as.data.frame() %>%
+  filter(!str_detect(.[["Hybridization REF"]], "\\?")) %>%
+  `colnames<-`(str_replace_all(colnames(.), "Hybridization REF", "Hybridization.REF")) %>%
+  mutate(Hybridization.REF = str_replace_all(.[["Hybridization.REF"]], "\\|", "_")) %>%
+  filter_i(cond = -1) %>%
+  `rownames<-`(.[["Hybridization.REF"]]) %>%
+  dplyr::select(c(1:ncol(.))[str_sub(colnames(.), 14,15) == "01"]) %>%
+  `colnames<-`(colnames(.) %>%
+                 str_sub(1, 12) %>%
+                 str_replace_all("\\.", "-"))
+
+rna_t <- rna %>%
+  t() %>%
+  df_fac2num()
+```
+
+
+```{r}
+g2 <- g2_origin %>%
+  `colnames<-`(str_replace_all(colnames(.),  "Row.names", "Probe_setID")) %>%
+  dplyr::filter(q.value < q_value_cuttoff) %>%
+  dplyr::arrange(-avg_sub) %>%
+  mutate(gene4match = Gene.Symbol %>%
+           str_replace_all( "LOC[0-9]* /// ", "") %>%
+           str_replace_all(" /// [-\ /a-zA-Z0-9]*$","")) %>%
+  dplyr::filter(gene4match != "---") %>%
+  mutate(gene4match = limma::alias2SymbolTable(gene4match)) %>%
+  dplyr::filter(!duplicated(gene4match))
+
+A_symbols <- g2$gene4match[g2$gene_cluster =="A"]
+B_symbols <- g2$gene4match[g2$gene_cluster =="B"]
+```
+
+```{r}
+# clin_origin %>%
+#   as.data.frame() %>%
+#   colnames(.) %>%
+#   .[str_detect(., "pathology")]
+
+getLimitTag <- function(vec){
+  result_vec <- c()
+  for(i in 1:length(vec)){
+    tag <- vec[i]
+    if(tag == "Major_t1"){
+      result_vec <- c(result_vec, NA)
+    }else if(str_detect(tag, "Major_t[2-4]*")){
+      result_vec <- c(result_vec, "Major\nt2~4")
+    }else if(str_detect(tag, "Minor")){
+      result_vec <- c(result_vec, "Minor")
+    }else{
+      result_vec <- c(result_vec, NA)
+      }
+  }
+  return(result_vec)
+}
+
+
+clin <- merge(x = clin_origin, y = clin_pick, by.x = 1, by.y = 0) %>%
+  mutate(pT = str_remove(pathology_T_stage, "[abc]*$") %>%
+           ifelse(.=="tx", NA, .) %>%
+             as.factor())  %>%
+  mutate(days_to_death = 
+           as.numeric(ifelse(is.na(days_to_death), 0, days_to_death))) %>%
+  mutate(days_to_last_followup =
+           as.numeric(ifelse(is.na(days_to_last_followup), 0, days_to_last_followup))) %>%
+  mutate(vital_status = as.numeric(vital_status)) %>%
+  mutate(time = pmax(days_to_death, days_to_last_followup)) %>%
+  mutate(var = clst_result) %>%
+  mutate(clst = ifelse(clst_result ==1, "Major", "Minor")) %>%
+  mutate(eval_tag = paste(clst, pT, sep="_")) %>%
+  mutate(limit_tag = getLimitTag(eval_tag))
+
+
+clin_mj_t12 <- clin %>%
+  dplyr::filter(pT %in% c("t1", "t2")) %>%
+  dplyr::filter(clst =="Major") %>%
+  dplyr::mutate(t_col = ifelse(pT =="t1", "red", "yellow")) %>%
+  dplyr::arrange(pT)
+
+table(clin_mj_t12$pT)
+```
+
+```{r}
+ref_sort <- function(sort_vector, ref_vector){
+  result_vector <- c()
+  for(i in c(1:length(ref_vector))){
+    index_i <- which(sort_vector==ref_vector[i])
+    result_vector <- c(result_vector, index_i)
+  }
+  return(result_vector)
+}
+```
+
+
+```{r}
+rna_deg <- rna_t %>%
+  as.data.frame() %>%
+  .[rownames(.) %in% clin_mj_t12$Row.names,] %>%
+  round() %>%
+  .[ref_sort(sort_vector = rownames(.), ref_vector = clin_mj_t12$Row.names),] %>%
+  t() %>%
+  df_fac2num() %>%
+  .[apply(., 1, sum) !=0, ] %>%
+  .[, ref_sort(sort_vector = colnames(.), ref_vector = clin_mj_t12$Row.names)]
+
+# sum(rownames(rna_deg) == clin_mj_t12$Row.names)
+
+```
+
+
+```{r}
+require(DESeq2)
+colData <- data.frame(condition= as.factor(clin_mj_t12$pT))
+e <- DESeqDataSetFromMatrix(countData = rna_deg, colData = colData, design = ~condition)
+e <- DESeq(e)
+
+```
+
+```{r}
+result_e <- results(e)
+p.val <- result_e$pvalue
+p.val[is.na(p.val)] <- 1
+q.val <- result_e$padj
+q.val[is.na(q.val)] <- 1
+foldchange <- result_e$log2FoldChange
+ranking <- rank(p.val)
+
+#result_e$log2FoldChange
+```
+
+
+```{r}
+result_deg <- data.frame(row.names =rownames(rna_deg),
+                         p.val,
+                         q.val,
+                         ranking,
+                         foldchange,stringsAsFactors = F)
+result_deg <- result_deg %>%
+  mutate(symbol = str_replace_all(rownames(.), "_[0-9]*$", "")) %>%
+  mutate(rowlabel = NA) %>%
+  as.data.frame()
+
+#i <- 3
+#is.element(el =  rownames(result_deg)[i],set = B_symbols)
+for(i in c(1:nrow(result_deg))){
+  if(result_deg[["symbol"]][i] %in% A_symbols){
+    result_deg$rowlabel[i] <- "A"
+  }else if(result_deg[["symbol"]][i] %in% B_symbols){
+    result_deg$rowlabel[i] <- "B"
+  }else{
+    
+  }
+}
+
+q_cut <- 0.01
+degs <- result_deg %>%
+  dplyr::filter(q.val < q_cut)
+```
+
+```{r}
+rna4heat <- rna_deg %>%
+  .[str_remove_all(rownames(.), "_[0-9]*$") %in% g2$gene4match,] %>%
+  `rownames<-`(str_remove_all(rownames(.), "_[0-9]*$")) %>%
+  .[ref_sort(sort_vector = rownames(.), ref_vector = g2$gene4match),] %>%
+  .[, ref_sort(sort_vector = colnames(.), ref_vector = clin_mj_t12$Row.names)] %>%
+  as.matrix(.)
+
+rna4heat <- log2(rna4heat +1) 
+
+class(rna4heat)
+rowslider <- ifelse(g2$gene_cluster == "A", "red", "blue")[g2$gene4match %in% rownames(rna4heat)]
+colslider <- clin_mj_t12$t_col
+
+
+require(gplots)
+
+heatmap.2(x = rna4heat, Rowv = T, Colv = F, ColSideColors = colslider, RowSideColors = rowslider, dendrogram = "row",trace = "none", col = bluered(256), labCol = F)
+```
+
+#rna meta data
+```{r}
+rna_meta <- data.frame(name = colnames(rna_origin)) %>%
+  filter_i(-1) %>%
+  mutate(barcode_patient = str_sub(name, 1, 12)) %>%
+  mutate(barcode_sample = str_sub(name, 14, 15)) %>%
+  mutate(barcode_vial = str_sub(name, 16, 16)) %>%
+  mutate(barcode_portion = str_sub(name, 18, 19)) %>%
+  mutate(bcr_portion_barcode = str_sub(name, 1, 19)) %>%
+  mutate(barcode_analyte = str_sub(name, 20,20)) %>%
+  mutate(barcode_plate = str_sub(name, 22, 25)) %>%
+  mutate(barcode_center = str_sub(name, 27, 28)) %>%
+  dplyr::filter(barcode_sample == "01")
+
+
+clin_rna_meta <- merge(clin, rna_meta, by.x=1, by.y = "barcode_patient")
+
+
+```
+
+
+```{r}
+# require(XML)
+# require("methods")
+biolist <- list.files(path = "./specimen_info",all.files = T,recursive = T,full.names = T,pattern = "\\.xml$")
+anotlist <- list.files(path = "./specimen_info",all.files = T,recursive = T,full.names = T,pattern = "annotations\\.txt$")
+
+
+
+
+require(xml2)
+#require(rvest)
+#require(purrr)
+
+get_texVec_chldr <- function(ndset){
+  ndset <- xml_children(ndset)
+  name_vec <- xml_name(ndset)
+  tex_vec <- xml_text(ndset) %>%
+    `names<-`(name_vec)
+  return(tex_vec)
+}
+
+
+
+spec_df <- data.frame()
+portion_df <- data.frame()
+analyte_df <- data.frame()
+slide_df <- data.frame()
+
+# i <- 1
+# j <- 1
+rm(i, j, k, l)
+
+for(i in 1:length(biolist)){
+  x <- biolist[i]
+  tag <- x %>%
+    str_remove("\\.\\/specimen_info\\/") %>%
+    str_extract("^[-a-z0-9]*")
+  
+  #print(tag)
+  x_i <- read_xml(x = x)
+  ch <- xml_find_all(x = x_i,xpath = ".//bio:sample")
+  
+  ch[1] %>%
+    xml_children() %>%
+  xml_name()
+  
+  #sample loop
+  for(j in 1:length(ch)){
+    ch_j <- ch[j]
+    ch_j
+    vec <- get_texVec_chldr(ch_j)
+    vec <- c(tag = tag, vec)
+    spec_df <- bind_rows(spec_df, vec)
+
+
+    tag4port <- vec[c("tag","bcr_sample_barcode", "sample_type_id")]
+    ports_j <- xml_find_all(x = ch_j, xpath = ".//bio:portion")
+    
+    #portion loop
+    for(k in 1:length(ports_j)){
+      vec_port <- ports_j[k] %>% get_texVec_chldr() %>%
+        c(tag4port, .)
+      portion_df <- bind_rows(portion_df, vec_port)
+      #names(vec_port)
+      tag4analyte <- vec_port[c("tag","bcr_sample_barcode", "sample_type_id", "bcr_portion_barcode")]
+      
+      #analyte loog
+      anals_k <- xml_find_all(x = ports_j, xpath = ".//bio:analyte")
+      slide_k <- xml_find_all(x = ports_j, xpath = ".//bio:slide")
+      #anals_k
+
+      for(l in 1:length(anals_k)){
+        vec_anal <- get_texVec_chldr(anals_k[l]) %>%
+          c(tag4analyte, .)
+        
+        analyte_df <- bind_rows(analyte_df, vec_anal)
+      }
+      
+      #slide loop
+      for(l in 1:length(slide_k)){
+        vec_sld <- get_texVec_chldr(slide_k[l]) %>%
+          c(tag4analyte, .)
+        
+        slide_df <- bind_rows(slide_df, vec_sld)
+      }
+
+    }
+  }
+}
+spec_df <- spec_df %>%
+  df_fac2chr()
+
+DT::datatable(data = spec_df, caption = "specimen_info")
+DT::datatable(data = portion_df, caption = "portion_info")
+
+analyte_df <- analyte_df %>%
+  mutate(barcode = str_sub(bcr_sample_barcode, 1, 12))
+DT::datatable(data = analyte_df, caption = "analyte_info")
+
+
+slide_df <- slide_df %>%
+  mutate(barcode = str_sub(bcr_sample_barcode, 1, 12))
+DT::datatable(data = slide_df, caption = "slide_info")
+
+anot_df <- data.frame()
+for(i in 1:length(anotlist)){
+  ant <- anotlist[i]
+  tag <- ant %>%
+    str_remove("\\.\\/specimen_info\\/") %>%
+    str_extract("^[-a-z0-9]*")
+  print(tag)
+  
+  ant <- read.table(file = anotlist[i],sep = "\t",fill = T,header = T)
+  ant <- cbind(ant, tag = tag)
+  anot_df <- bind_rows(ant, anot_df)
+}
+anot_df <- anot_df %>%
+  df_fac2chr()
+#anotlist
+
+DT::datatable(data = anot_df, caption = "annotation if exist.")
+
+```
+
+```{r}
+is_nullstr <- function(str){
+  if(is.na(str)){
+    return(T)
+  }else if(str == ""){
+    return(T)
+  }else if(is.character(str) & str != ""){
+    return(F)
+  }else{
+    return(NA)
+  }
+}
+
+rm_null_col <- function(df){
+  null_ind <- c()
+  for(i in 1:ncol(df)){
+    sum_null <- sapply(df[,i], is_nullstr) %>%
+      sum()
+    if(sum_null == nrow(df)){
+      null_ind <- c(null_ind, F)
+    }else{
+      null_ind <- c(null_ind, T)
+      }
+  }
+  df <- df[,null_ind]
+  return(df)
+}
+
+
+# is_nullstr(NA)
+# 
+# sapply(specim[,40], is_nullstr) %>%
+#   sum()
+# 
+# specim[,40][2] %>%
+#   class()
+# is_nullstr("")
+# is_nullstr(1)
+
+```
+
+
+
+```{r}
+specim0 <- spec_df %>%
+  dplyr::filter(sample_type_id =="01")
+  
+specim <- merge(specim0, anot_df, by= "tag", all = T)
+  
+specim1 <- rm_null_col(specim) %>%
+  mutate(barcode = str_sub(bcr_sample_barcode, 1, 12)) %>%
+  dplyr::filter(barcode %in% clin$Row.names) 
+
+specim1$barcode[duplicated(specim1$barcode)]
+
+specim1 <- specim1 %>%
+  dplyr::filter(!duplicated(.[["barcode"]]))
+
+specim_clin <- merge(specim1, clin, by.x = "barcode", by.y = 1) %>%
+  dplyr::filter(!is.na(limit_tag))
+```
+
+
+```{r}
+outdir <- "./pngdir/"
+#dir.create(outdir)
+
+require(lawstats)
+
+boxjit <- function(data, categ ,gene, log=T){
+  print(key)
+  
+  label_x <- categ
+  if(log){
+    label_y <- paste("plus 1 and log2 ", gene, sep = "")
+  }else{
+    label_y <- paste("linear ", gene, sep = "")
+  }
+
+  
+  log_bool <- ifelse(log, "_logscale", "_linearscale")
+  filename <- paste(outdir, categ, gene, log_bool, "_boxjit.png", sep = "")
+  data <- data %>%
+    mutate_(eval_categ = categ) %>%
+    mutate_(eval_gene = gene) %>%
+    dplyr::filter(!is.na(eval_categ) & !is.na(eval_gene)) %>%
+    dplyr::filter(eval_categ != "" & eval_gene != "") %>%
+    mutate(eval_gene = as.numeric(eval_gene)) %>%
+    mutate(eval_gene_log = log2(eval_gene +1))
+    #dplyr::select(one_of(c("time", "vital_status", "eval_categ", "eval_gene")))
+  
+  if(log){
+      stage2gen1 <- ggplot()+
+        theme_classic()+xlab(label_x)+ylab(label_y)+
+        geom_boxplot(data = data, aes(x=eval_categ, y=log2(eval_gene+1)), outlier.colour = NA)+
+        geom_jitter(data = data, aes(x=eval_categ, y=log2(eval_gene+1)),size =0.5, color ="red", height = 0)
+  }else{
+      stage2gen1 <- ggplot()+
+        theme_classic()+xlab(label_x)+ylab(label_y)+
+        geom_boxplot(data = data, aes(x=eval_categ, y=eval_gene), outlier.colour = NA)+
+        geom_jitter(data = data, aes(x=eval_categ, y=eval_gene),size =0.5, color ="red", height = 0)
+  }
+
+
+  grid::grid.draw(stage2gen1)
+  ggsave(filename = filename, plot = stage2gen1,device = "png",width = 9, height = 9, units = "cm", dpi = 300)
+    
+  
+  label_test <- factor(data[[categ]]) %>%
+    levels()
+  x <- data[["eval_gene"]][data[[categ]] ==label_test[1]]
+  y <- data[["eval_gene"]][data[[categ]] ==label_test[2]]
+  
+  
+  if(length(x) < 5 | length(y) < 5){
+    print(length(x))
+    print("test avoided")
+  }else{
+    # print("ks.test")
+    print("Brunner-Munzel Test")
+    # ks.test(x, y) %>%
+    lawstat::brunner.munzel.test(x, y) %>%
+      print()
+  }
+
+}
+
+
+```
+
+```{r}
+categ <- "limit_tag"
+key <- "initial_weight"
+boxjit(specim_clin, categ = categ, gene = key, log = F)
+```
+
+
+```{r}
+key <- "days_to_collection"
+boxjit(specim_clin, categ = categ, gene = key, log = F)
+```
+
+```{r}
+setNA2Zero <- function(vec){
+  vec0 <- ifelse(is.na(vec), 0, vec)
+  return(vec0)
+}
+
+setNA2Emp <- function(vec){
+  vec0 <- ifelse(is.na(vec), "", vec)
+  return(vec0)
+}
+
+
+# clstInts2Strs <- function(vec){
+#   int2str <- function(num){
+#     if(num ==1){
+#       return("Major")
+#     }else if(num ==2){
+#       return("Minor")
+#     }else{
+#       return("Unknown")
+#     }
+#   }
+#   
+#   strvec <- sapply(vec, int2str)
+#   return(strvec)
+# }
+
+dat <- specim_clin
+clst <- "limit_tag"
+key <- "oct_embedded"
+# dat[[clst]]
+is.na(dat[[clst]])
+
+getMat <- function(dat, clst = "limit_tag", key){
+  d <- dat %>%
+    as.data.frame() %>%
+    dplyr::filter(!is.na(clst)) %>%
+    dplyr::select(one_of(c(clst, key))) #%>%
+    #dplyr::mutate(!!clst := clstInts2Strs(.[[clst]]))
+  
+  smr <- d %>%
+    mutate(count = 1) %>%
+    group_by_(clst, key) %>%
+    summarise(count = sum(count))
+  
+  mt <- smr %>%
+    tidyr::spread_(key = key, value = "count") %>%
+    purrr::map_at(.at = c(2:(ncol(.))), setNA2Zero) %>%
+    as.data.frame() %>%
+    `rownames<-`(.[[clst]]) %>%
+    dplyr::select(-matches(clst)) %>%
+    t() 
+  #    dplyr::select(-ends_with("NA.")) %>%
+  
+  return(mt)
+}
+
+trimLastNARow <- function(mat){
+  lastname <- rownames(mat) %>%
+    .[length(.)]
+  if(str_detect(lastname, "NA")){
+    mat <- mat %>%
+      .[c(1:nrow(.) -1),]
+  }else{
+    print("NA row not detected.")
+  }
+  return(mat)
+}
+
+getChiseqFish <- function(mat){
+  print(chisq.test(mat))
+  print(fisher.test(mat))
+}
+
+checkLab_I <- function(dat, i, get_bool =F){
+  key_i <- colnames(dat)[i]
+  print(paste("analysing label: ", key_i, sep=""))
+  mat_i <- getMat(dat, key = key_i)
+  print(htmltools::tagList(
+    DT::datatable(data = mat_i, caption = key_i)
+  ))
+  
+  mat_i %>%
+    trimLastNARow() %>%
+    getChiseqFish()
+
+  if(get_bool){
+    return(mat_i)
+  }
+}
+
+getKeyWord <- function(d, clst = "limit_tag", key){
+  cln_ind <- str_detect(colnames(d), "^Row")
+  
+  clst_ind <- str_detect(colnames(d), clst)
+  key_ind <- str_detect(colnames(d), key)
+  ind <- colnames(d)[cln_ind | clst_ind | key_ind]
+  d <- d %>%
+    dplyr::select(one_of(ind))
+  return(d)
+}
+
+ggsave2 <- function(plot, wid=9, hei=9){
+  plot_name <- deparse(substitute(plot))
+  file_name <- paste(plot_name, ".png", sep = "",collapse = "")
+  ggsave(filename = file_name,plot = plot,device = "png",width = wid, height = hei,dpi = 300,units = "cm")
+}
+```
+
+```{r results="asis"}
+key <- "oct_embedded"
+d <- specim_clin %>%
+  getKeyWord(key = key) %>%
+  mutate_(key = key)
+
+checkLab_I(d, i = 3, get_bool = T)
+
+```
+
+
+```{r}
+slide_df <- slide_df %>%
+  dplyr::filter(sample_type_id =="01") %>%
+  dplyr::filter(bcr_portion_barcode %in% rna_meta$bcr_portion_barcode)
+
+sum(duplicated(slide_df$bcr_portion_barcode))
+
+slide_df$bcr_portion_barcode %>%
+  .[duplicated(.)]
+
+slide_clin <- merge(slide_df, clin, by.x = "barcode", by.y = 1) %>%
+  dplyr::filter(!is.na(limit_tag))
+
+percent_tags <- colnames(slide_clin) %>%
+  .[str_detect(., "percent")] %>%
+  .[-c(6, 11)]
+
+  
+#percent_tags 
+```
+
+```{r}
+for(i in 1:length(percent_tags)){
+  key <- percent_tags[i]
+  categ <- "limit_tag"
+
+  boxjit(slide_clin, categ = categ, gene = key, log = F)
+  
+}
+```
+
+```{r}
+analyte_df <- analyte_df %>%
+  dplyr::filter(sample_type_id =="01") %>%
+  dplyr::filter(bcr_portion_barcode %in% rna_meta$bcr_portion_barcode) %>%
+  dplyr::filter(analyte_type =="RNA")
+
+anal_clin <- merge(analyte_df, clin, by.x = "barcode", by.y = 1) %>%
+  dplyr::filter(!is.na(limit_tag))
+
+anal_keys <- c("concentration", "a260_a280_ratio")
+```
+
+
+```{r}
+for(i in 1:length(anal_keys)){
+  key <- anal_keys[i]
+  categ <- "limit_tag"
+
+  boxjit(anal_clin, categ = categ, gene = key, log = F)
+}
+```
+
+
+```{r}
+
+check_con <- anal_clin %>%
+  dplyr::select(concentration, limit_tag)
+
+check_con %>%
+  dplyr::filter(limit_tag =="Minor") %>%
+  .[["concentration"]] %>%
+  as.numeric() %>%
+  summary()
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+
+
+# tmp <-  df %>% apply(., 1, function(vec){
+#     !is.na(vec[intre_genes[1:3]])
+#   }) %>%
+#   as.vector()
+# 
+# tmp <-  df %>% 
+#   apply(., 1, function(vec){
+#     vec[intre_genes[1:3]] %>%
+#       sapply(X = ., FUN = is.na) %>%
+#       sum() ==3 %>%
+#       return()
+#   })
+# 
+#df <- mg_cla
+#df[["patient.histological_type"]]
+#rm(df)
+# 
+# categ <- "limit_tag"
+# key <- "initial_weight"
+# df <- specim_clin
+# getCorFig <- function(df, categ="limit_tag", key, fact_cont, pos_neg, x_log =F){
+#   df <- df %>%
+#     mutate_(key = key) %>%
+#     mutate_(categ = categ) %>%
+#     dplyr::select(one_of(c("key", "categ"))) %>%
+#     dplyr::filter(!is.na(key)) %>%
+#     dplyr::filter(!is.na(categ)) %>%
+#     dplyr::mutate(log_key = log2(as.numeric(key) +1))
+#     
+#   
+#   #-1 *df$key
+#   
+#   if(pos_neg ==F & fact_cont =="cont"){
+#     df <- df %>%
+#       mutate(key = as.numeric(key)) %>%
+#       mutate(key = -1*key) 
+#   }else if(pos_neg ==T & fact_cont =="cont"){
+#     df <- df %>%
+#       mutate(key = as.numeric(key))
+#   }else{
+#     print("unknown pos_neg bool")
+#   }
+#   
+#   if(x_log == T & fact_cont == "cont"){
+#     x_log_str <- "p1log2"
+#     df <- df %>%
+#       mutate(key = log2(key +1))
+#   }else{
+#     x_log_str <- "linear"
+#   }
+#   
+#   if(fact_cont =="cont"){
+#     
+#     scat <- ggplot()+theme_classic()+
+#       geom_boxplot(data = df, mapping = aes_string(x = "categ", y ="key"), outlier.color = NA) +
+#       geom_jitter(data = df, mapping = aes_string(x = "categ", y ="key"), size = 0.5, color="red") +
+#       xlab(paste(x_log_str, categ))+ylab(paste(key, "linear value", sep = ":"))
+#     
+#     grid::grid.draw(scat)
+#     devi <- "png"
+#     file_ln <- paste(key, "linear_scat.", devi, sep = "")
+#     ggsave(filename = file_ln, plot = scat, device = devi, width = 12, height = 12,units = "cm",dpi = 300)
+#     
+#     
+#     log_scat <- ggplot()+theme_classic()+
+#       geom_jitter(data = df_gt, mapping = aes_string(x = "key", y ="log", color = "gene"), size = 0.5)+
+#       xlab(paste(x_log_str, key))+ylab("plus1 and log2 expression value")
+#     
+#     grid::grid.draw(log_scat)
+#     file_lg <- paste(key, "p1log2_scat.", devi, sep = "")
+#     ggsave(filename = file_lg, plot = log_scat,device = devi, width = 12, height = 12,units = "cm",dpi = 300)
+#   }else if(fact_cont =="fact"){
+#     df <- df %>%
+#       dplyr::filter(!is.na(key)) %>%
+#       dplyr::mutate(key = as.factor(key))
+#     
+#     df_gt <- df %>%
+#       tidyr::gather(key = gene, value = gene_exp, one_of(intre_genes)) %>%
+#       dplyr::filter(!is.na(gene_exp)) %>%
+#       dplyr::mutate(log_gene_exp = log2(gene_exp +1)) %>%
+#       .[sample(x = c(1:nrow(.)),size = nrow(.), replace = F),]
+#     
+#     boxjit <- ggplot()+theme_classic()+
+#       geom_boxplot(data = df_gt, mapping = aes_string(x = "key", y="gene_exp", color="gene"), outlier.color = NA) +
+#       geom_point(data = df_gt, mapping = aes_string(x ="key", y="log_gene_exp", color ="gene"), size = 0.2, position = position_jitterdodge(jitter.width = 0.2))+
+#       xlab(key)
+#     grid::grid.draw(boxjit)
+#     
+#     devi <- "png"
+#     file_ln <- paste(key, "linear_boxjit.", devi, sep="")
+#     ggsave(filename = file_ln, plot = boxjit, device = devi, width = 12, height = 12,units = "cm",dpi = 300)
+#     
+#     log_boxjit <- ggplot()+theme_classic()+
+#       geom_boxplot(data = df_gt, mapping = aes_string(x = "key", y="log_gene_exp", color="gene"), outlier.color = NA) +
+#       geom_point(data = df_gt, mapping = aes_string(x ="key", y="log_gene_exp", color ="gene"), size = 0.2, position = position_jitterdodge(jitter.width = 0.2)) +
+#       xlab(key)
+#     
+#     grid::grid.draw(log_boxjit)  
+#     file_lg <- paste(key, "linear_boxjit.", devi, sep="")
+#     ggsave(filename = file_lg, plot = boxjit, device = devi, width = 12, height = 12,units = "cm",dpi = 300)
+#   }
+#   
+# }
+# 
+
+
+```
+
+```{r}
+# key <- "patient.days_to_birth"
+# fact_cont <- "cont"
+# pos_neg <- F
+# 
+# getCorFig(df = mg_cla, key = key, fact_cont = fact_cont, pos_neg = pos_neg)
+```
+
+

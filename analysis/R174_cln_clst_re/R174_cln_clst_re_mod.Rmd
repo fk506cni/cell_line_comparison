@@ -1,0 +1,776 @@
+---
+title: "R174_cln_clst_re"
+author: "fkeita"
+date: "2018/9/27"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup}
+knitr::opts_chunk$set(echo = TRUE, cache = TRUE,cache.lazy = FALSE, echo=TRUE)
+# source("http://bioconductor.org/biocLite.R")
+require("stringr")
+require("tidyverse")
+require("MASS")
+# require("ggplot2")
+# require("dplyr")
+# require("magrittr")
+require(extrafont)
+loadfonts(quiet = T)
+
+#biocLite("GEOquery")
+##require(GEOquery)
+
+set.seed("20180927")
+```
+
+```{r}
+d <- data.table::fread(file = "./clst_clin2.csv",sep = ",", header = T, stringsAsFactors = F) %>%
+  as.data.frame()
+
+class(d)
+
+
+dt <- d %>%
+  t() %>%
+  as.data.frame() %>%
+  dplyr::mutate(rowname = rownames(.)) %>%
+  .[,c(ncol(.), 1:ncol(.) -1)]
+# d %>%
+#   DT::datatable(caption = "clinicaldata and clust")
+```
+
+```{r}
+trimAllNAcol <- function(d){
+  na_ind <- colnames(d)[apply(X = d, 2, function(vec){return(sum(!is.na(vec)))}) != 0]
+  
+  d <- d %>%
+    dplyr::select(one_of(na_ind))
+
+  return(d)
+}
+
+
+
+colnames(d)[1:4]
+
+getKeyWord <- function(d, clst = "clst_result", key){
+  cln_ind <- str_detect(colnames(d), "^Row")
+  
+  clst_ind <- str_detect(colnames(d), clst)
+  key_ind <- str_detect(colnames(d), key)
+  ind <- colnames(d)[cln_ind | clst_ind | key_ind]
+  d <- d %>%
+    dplyr::select(one_of(ind))
+  return(d)
+}
+clst <- "clst_result"
+key <- "ablation"
+d_ab <- d %>%
+  getKeyWord(key = key) %>%
+  trimAllNAcol()
+
+key <- "indicator"
+d_ind <- d %>%
+  getKeyWord(key = key) %>%
+  trimAllNAcol() 
+
+key <- "bilirubin"
+
+d_bil <- d %>%
+  getKeyWord(key = key) %>%
+  trimAllNAcol() 
+
+key <- "creatinine"
+d_cre <- d %>%
+  getKeyWord(key = key) %>%
+  trimAllNAcol() 
+
+```
+
+```{r}
+dmeta <- d
+for(i in 4:ncol(d)){
+  col_i <- colnames(d)[i]
+  dmeta[[col_i]] <- !is.na(d[[col_i]])
+}
+
+class(dmeta)
+#
+# dmeta <- dmeta %>%
+#   dplyr::group_by(clst_result)
+
+# i <- 50
+# col_i <- colnames(dmeta)[i]
+
+dmeta_i <- dmeta %>%
+  `colnames<-`(str_replace_all(colnames(.), "-|\\.", "_")) %>%
+  dplyr::summarise(sum(patient_ablations_ablation_2_month_of_form_completion))
+
+  #dplyr::summarise()
+  
+#dmeta[,i]  
+#i <- 15
+getClstSum <- function(dmeta, i){
+  col_i <- colnames(dmeta)[i]
+  dtb <- dmeta %>%
+    dplyr::select(one_of(c("clst_result", col_i))) #%>%
+  dtb[["col_i"]] <- dtb[[col_i]]
+#    mutate(col_i = .[[col_i]])
+  sm <- dtb %>%
+    group_by(clst_result) %>%
+    summarise(sum(col_i))
+  colnames(sm)[2] <- col_i
+  return(sm)
+}
+
+#dmeta[,15]
+sm <- getClstSum(dmeta, 4)
+for(i in 5:ncol(dmeta)){
+  print(i)
+  sm <- cbind(sm, getClstSum(dmeta, i)[,2])
+  # break()
+}
+
+smt <- sm %>%
+  t() %>%
+  as.data.frame() %>%
+  dplyr::mutate(labels = rownames(.))
+
+DT::datatable(data = smt, caption = "variable and non-na count\nin two cluster")
+```
+
+```{r}
+setNA2Zero <- function(vec){
+  vec0 <- ifelse(is.na(vec), 0, vec)
+  return(vec0)
+}
+
+setNA2Emp <- function(vec){
+  vec0 <- ifelse(is.na(vec), "", vec)
+  return(vec0)
+}
+
+
+clstInts2Strs <- function(vec){
+  int2str <- function(num){
+    if(num ==1){
+      return("Major")
+    }else if(num ==2){
+      return("Minor")
+    }else{
+      return("Unknown")
+    }
+  }
+  
+  strvec <- sapply(vec, int2str)
+  return(strvec)
+}
+
+
+
+getMat <- function(dat, clst = "clst_result", key){
+  d <- dat %>%
+    dplyr::filter(!is.na(.[[clst]])) %>%
+    dplyr::select(one_of(c(clst, key))) %>%
+    dplyr::mutate(!!clst := clstInts2Strs(.[[clst]]))
+  
+  smr <- d %>%
+    mutate(count = 1) %>%
+    group_by_(clst, key) %>%
+    summarise(count = sum(count))
+  
+  mt <- smr %>%
+    tidyr::spread_(key = key, value = "count") %>%
+    purrr::map_at(.at = c(2:(ncol(.))), setNA2Zero) %>%
+    as.data.frame() %>%
+    `rownames<-`(.[[clst]]) %>%
+    dplyr::select(-matches(clst)) %>%
+    t()
+  
+  #    dplyr::select(-ends_with("NA.")) %>%
+  
+  return(mt)
+}
+
+trimLastNARow <- function(mat){
+  lastname <- rownames(mat) %>%
+    .[length(.)]
+  if(str_detect(lastname, "NA")){
+    mat <- mat %>%
+      .[c(1:nrow(.) -1),]
+  }else{
+    print("NA row not detected.")
+  }
+  return(mat)
+}
+
+getChiseqFish <- function(mat){
+  print(chisq.test(mat))
+  print(fisher.test(mat))
+}
+
+checkLab_I <- function(dat, i, get_bool =F){
+  key_i <- colnames(dat)[i]
+  print(paste("analysing label: ", key_i, sep=""))
+  mat_i <- getMat(dat, key = key_i)
+  print(htmltools::tagList(
+    DT::datatable(data = mat_i, caption = key_i)
+  ))
+  
+  mat_i %>%
+    trimLastNARow() %>%
+    getChiseqFish()
+
+  if(get_bool){
+    return(mat_i)
+  }
+}
+
+
+
+ggsave2 <- function(plot, wid=9, hei=9){
+  plot_name <- deparse(substitute(plot))
+  file_name <- paste(plot_name, ".png", sep = "",collapse = "")
+  ggsave(filename = file_name,plot = plot,device = "png",width = wid, height = hei,dpi = 300,units = "cm")
+}
+```
+
+
+
+age
+```{r}
+key <- "patient.age_at_initial_pathologic_diagnosis"
+d_age <- d %>%
+  getKeyWord(key = key) %>%
+  trimAllNAcol() %>%
+  dplyr::filter(!is.na(.[[key]])) %>%
+  mutate_(key = key)
+
+age_major <- d_age %>%
+  dplyr::filter(clst_result ==1) %>%
+  .[[key]]
+
+age_minor <- d_age %>%
+  dplyr::filter(clst_result ==2) %>%
+  .[[key]]
+require(lawstat)
+lawstat::brunner.munzel.test(age_major, age_minor)
+# ks.test(age_major, age_minor)
+
+p_age <- ggplot()+theme_classic()+
+  geom_boxplot(data = d_age, mapping =  aes(x= factor(clst_result), y = key),outlier.colour = NA) +
+  geom_jitter(data = d_age, mapping = aes(x= factor(clst_result), y = key), color ="red", size = 0.5) +
+  ylab(key) +ggtitle(key)
+p_age
+
+ggsave2(p_age, wid = 9)
+
+```
+
+```{r results='asis'}
+key <- "patient.neoplasm_histologic_grade"
+d_hist <- d %>%
+  getKeyWord(key = key) %>%
+  mutate_(key = key)
+
+
+mt <- checkLab_I(d_hist, i = 3, get_bool = T)
+
+mt_ad <- mt %>%
+  as.data.frame() %>%
+  mutate(rowname = rownames(.)) %>%
+  dplyr::select(rowname, everything()) %>%
+  dplyr::rename(histological_grade = rowname)
+openxlsx::write.xlsx(x = mt_ad, file = "./R174_hist_grade_dist.xlsx")
+
+```
+
+
+```{r results='asis'}
+key <- "patient.history_of_neoadjuvant_treatment"
+d_nac <- d %>%
+  getKeyWord(key = key) %>%
+  mutate_(key = key)
+
+checkLab_I(d_nac, i = 3)
+```
+
+```{r results='asis'}
+key <- "patient.child_pugh_classification_grade"
+
+d_cp <- d %>%
+  getKeyWord(key = key) %>%
+  mutate_(key = key)
+
+checkLab_I(d_cp, i = 3)
+```
+patient.fibrosis_ishak_score
+
+```{r results='asis'}
+key <- "patient.fibrosis_ishak_score"
+
+d_fib <- d %>%
+  getKeyWord(key = key) %>%
+  mutate_(key = key)
+
+checkLab_I(d_fib, i = 3)
+
+```
+
+```{r results='asis'}
+key <- "patient.specimen_collection_method_name"
+
+d_ope <- d %>%
+  getKeyWord(key = key) %>%
+  mutate_(key = key)
+
+checkLab_I(d_ope, i = 3)
+```
+
+```{r results='asis'}
+key <- "patient.histological_type"
+
+d_hit <- d %>%
+  getKeyWord(key = key) %>%
+  mutate_(key = key)
+
+checkLab_I(d_hit, i = 3)
+
+```
+
+```{r results="asis"}
+key <- "patient.prothrombin_time_result_value"
+
+d_pt <- d %>%
+  getKeyWord(key = key) %>%
+  mutate_(key = key)
+
+x <- d_pt %>%
+  dplyr::filter(clst_result == 1) %>%
+  .[[key]]
+y <- d_pt %>%
+  dplyr::filter(clst_result == 2) %>%
+  .[[key]]
+
+ks.test(x, y)
+
+p_pt_boxjit <- ggplot()+theme_classic()+
+  geom_boxplot(data = d_pt, mapping =  aes(x= factor(clst_result), y = key),outlier.colour = NA) +
+  geom_jitter(data = d_pt, mapping = aes(x= factor(clst_result), y = key), color ="red", size = 0.5) +
+  ylab(key)+ggtitle(key)
+
+p_pt_boxjit
+
+ggsave2(p_pt_boxjit, wid = 9)
+
+p_pt_logvio <- ggplot()+theme_classic()+
+  geom_violin(data = d_pt, mapping = aes(x= factor(clst_result), y = log2(key))) +
+  geom_jitter(data = d_pt, mapping = aes(x= factor(clst_result), y = log2(key)), color ="red", size = 0.5) +
+  ggtitle(key)
+p_pt_logvio
+
+ggsave2(p_pt_logvio)
+```
+
+
+
+```{r}
+key <- "patient.bilirubin_upper_limit"
+
+d_bil <- d %>%
+  getKeyWord(key = key) %>%
+  mutate_(key = key)
+
+x <- d_bil %>%
+  dplyr::filter(clst_result == 1) %>%
+  .[[key]]
+y <- d_bil %>%
+  dplyr::filter(clst_result == 2) %>%
+  .[[key]]
+
+ks.test(x, y)
+
+p_bil_boxjit <- ggplot()+theme_classic()+
+  geom_boxplot(data = d_bil, mapping =  aes(x= factor(clst_result), y = key),outlier.colour = NA) +
+  geom_jitter(data = d_bil, mapping = aes(x= factor(clst_result), y = key), color ="red", size = 0.5) +
+  ggtitle(key)
+
+p_bil_boxjit
+
+ggsave2(p_bil_boxjit)
+
+p_bil_log_boxjit <- ggplot()+theme_classic()+
+  geom_boxplot(data = d_bil, mapping =  aes(x= factor(clst_result), y = log2(key)),outlier.colour = NA) +
+  geom_jitter(data = d_bil, mapping = aes(x= factor(clst_result), y = log2(key)), color ="red", size = 0.5) +
+  ggtitle(key)
+
+p_bil_log_boxjit
+```
+
+```{r}
+key <- "patient.albumin_result_specified_value"
+
+d_alb <- d %>%
+  getKeyWord(key = key) %>%
+  mutate_(key = key)
+
+d_alb %>%
+  t() %>%
+  as.data.frame() %>%
+  DT::datatable(data = ., caption = "alb table")
+
+#max(d_alb$patient.albumin_result_specified_value)
+
+
+x <- d_alb %>%
+  dplyr::filter(clst_result == 1) %>%
+  .[[key]]
+y <- d_alb %>%
+  dplyr::filter(clst_result == 2) %>%
+  .[[key]]
+
+ks.test(x, y)
+
+
+p_alb_boxjit <- ggplot()+theme_classic()+
+  geom_boxplot(data = d_alb, mapping =  aes(x= factor(clst_result), y = key),outlier.colour = NA) +
+  geom_jitter(data = d_alb, mapping = aes(x= factor(clst_result), y = key), color ="red", size = 0.5) +
+  ggtitle(key)
+
+p_alb_boxjit
+
+ggsave2(p_alb_boxjit)
+
+p_alb_log2_boxjit <- ggplot()+theme_classic()+
+  geom_boxplot(data = d_alb, mapping =  aes(x= factor(clst_result), y = log2(key)),outlier.colour = NA) +
+  geom_jitter(data = d_alb, mapping = aes(x= factor(clst_result), y = log2(key)), color ="red", size = 0.5) +
+  ggtitle(key)
+
+p_alb_log2_boxjit
+
+ggsave2(p_alb_log2_boxjit)
+
+
+```
+
+```{r}
+getI <- function(vec, i){
+  return(vec[i])
+}
+
+multiRep2 <- function(x, pairs){
+  # x
+  # pairs is list of pair vector
+  #stopifnot(length(pairs != 0))
+  pre <- lapply(pairs, getI, i=1) %>%
+    unlist()
+  after <- lapply(pairs, getI, i=2) %>%
+    unlist()
+  ind <- match(x, pre)
+  return(ifelse(is.na(ind), x, after[ind]))
+}
+
+apedl <- function(l, c1, c2){
+  l <- append(l, list(c(c1, c2)))
+  return(l)
+}
+
+r_pairs <- list() %>%
+  apedl("hbcab total (+), hbsag (-), hbcigm ab (-)", "HBV infection history") %>%
+  apedl("chronic hepatitis, either viral or autoimmune", "unknown chronic hepatitis") %>%
+  apedl("tobacco use", "tobacco") %>%
+  apedl("liver cirrhosis", "cirrhosis") %>%
+  apedl("male, iddm for 30+years", "DM") %>%
+  apedl("moderate alcohol consumption", "alcohol consumption") %>%
+  apedl("no", "no history of primary risk factors") %>%
+  apedl("anti tb drug used for tb positive testing", "anti TB drug") %>%
+  apedl("moderate alcohol use on weekends", "alcohol consumption") %>%
+  apedl("alcohol abuse", "alcohol consumption") %>%
+  apedl("former smoker", "tobacco") %>%
+  apedl("smoking", "tobacco") %>%
+  apedl("smoker", "tobacco") %>%
+  apedl("extensive tobacco history", "tobacco") %>%
+  apedl("tabacco", "tobacco")
+
+```
+
+
+##risk
+```{r}
+tag_vec <- c("clst_result",colnames(d)[str_detect(colnames(d), "risk")])
+d_risk <- d %>%
+  dplyr::select(one_of(tag_vec)) %>%
+  `colnames<-`(c("clst_result", "risk1", "risk2", "risk3", "risk4", "risk5")) %>%
+  mutate(risk_all = ifelse(is.na(risk1) &
+                             is.na(risk2) &
+                             is.na(risk3) &
+                             is.na(risk4) &
+                             is.na(risk5), "no description of primary risk factors", NA))
+
+d_risk_long <- NULL
+for(i in 2:7){
+  d_i <- d_risk[,c(1,i)] %>%
+    `colnames<-`(c("clst_result", "risk_factor"))
+  d_risk_long <- rbind(d_risk_long, d_i)
+}
+d_risk_long <- d_risk_long %>%
+  dplyr::filter(!is.na(risk_factor)) %>%
+  mutate(comma_count = str_count(risk_factor, ",")) %>%
+  mutate(risk_factor_clean = multiRep2(risk_factor, r_pairs)) %>%
+  mutate(comma_count2 = str_count(risk_factor_clean, ",")) %>%
+  filter(risk_factor != "other")
+
+d_risk_long2 <- NULL
+#i <- 409
+for(i in 1: nrow(d_risk_long)){
+  row_i <- d_risk_long[i,]
+  if(row_i$comma_count2 ==0){
+    d_risk_long2 <- rbind(d_risk_long2, row_i)
+  }else{
+    wds <- str_split(row_i$risk_factor_clean, ", ")[[1]]
+    row_i2 <- row_i
+    row_i2$risk_factor_clean <- wds[2]
+    row_i$risk_factor_clean <- wds[1]
+    d_risk_long2 <- rbind(d_risk_long2, row_i, row_i2)
+  }
+}
+
+d_risk_long2 <- d_risk_long2 %>%
+  mutate(risk_factor_clean2 = multiRep2(risk_factor_clean, r_pairs))
+
+
+
+
+mt <- checkLab_I(d_risk_long2, i = 6, get_bool = T) %>%
+  `rownames<-`(str_replace_all(rownames(.), "\\.", "_"))
+DT::datatable(data = mt, caption = "risk_factors_multiple choices allowed")
+```
+
+```{r}
+key <- "patient.height"
+
+d_hei <- d %>%
+  getKeyWord(key = key) %>%
+  mutate_(key = key)
+
+
+x <- d_hei %>%
+  dplyr::filter(clst_result == 1) %>%
+  .[[key]]
+y <- d_hei %>%
+  dplyr::filter(clst_result == 2) %>%
+  .[[key]]
+
+ks.test(x, y)
+
+p_hei_boxjit <- ggplot()+theme_classic()+
+  geom_boxplot(data = d_hei, mapping =  aes(x= factor(clst_result), y = key),outlier.colour = NA) +
+  geom_jitter(data = d_hei, mapping = aes(x= factor(clst_result), y = key), color ="red", size = 0.5) +
+  ggtitle(key)
+
+p_hei_boxjit
+
+ggsave2(p_hei_boxjit)
+
+```
+
+```{r}
+key <- "patient.weight"
+
+d_wei <- d %>%
+  getKeyWord(key = key) %>%
+  mutate_(key = key)
+
+
+x <- d_wei %>%
+  dplyr::filter(clst_result == 1) %>%
+  .[[key]]
+y <- d_wei %>%
+  dplyr::filter(clst_result == 2) %>%
+  .[[key]]
+
+ks.test(x, y)
+
+p_wei_boxjit <- ggplot()+theme_classic()+
+  geom_boxplot(data = d_wei, mapping =  aes(x= factor(clst_result), y = key),outlier.colour = NA) +
+  geom_jitter(data = d_wei, mapping = aes(x= factor(clst_result), y = key), color ="red", size = 0.5) +
+  ggtitle(key)
+
+p_wei_boxjit
+
+ggsave2(p_wei_boxjit)
+```
+
+```{r}
+d$bmi <- d$patient.weight / (d$patient.height/100)^2
+sum(is.na(d$bmi))
+
+key <- "bmi"
+
+d_bmi <- d %>%
+  getKeyWord(key = key) %>%
+  mutate_(key = key)
+
+
+x <- d_bmi %>%
+  dplyr::filter(clst_result == 1) %>%
+  .[[key]]
+y <- d_bmi %>%
+  dplyr::filter(clst_result == 2) %>%
+  .[[key]]
+
+ks.test(x, y)
+
+
+p_bmi_boxjit <- ggplot()+theme_classic()+
+  geom_boxplot(data = d_bmi, mapping =  aes(x= factor(clst_result), y = key),outlier.colour = NA) +
+  geom_jitter(data = d_bmi, mapping = aes(x= factor(clst_result), y = key), color ="red", size = 0.5) +
+  ggtitle(key)
+
+p_bmi_boxjit
+
+ggsave2(p_bmi_boxjit)
+
+```
+
+```{r}
+key <- "patient.platelet_result_count"
+
+d_plt <- d %>%
+  getKeyWord(key = key) %>%
+  mutate_(key = key)
+
+
+x <- d_plt %>%
+  dplyr::filter(clst_result == 1) %>%
+  .[[key]]
+y <- d_plt %>%
+  dplyr::filter(clst_result == 2) %>%
+  .[[key]]
+
+ks.test(x, y)
+
+p_plt_boxjit <- ggplot()+theme_classic()+
+  geom_boxplot(data = d_plt, mapping =  aes(x= factor(clst_result), y = key),outlier.colour = NA) +
+  geom_jitter(data = d_plt, mapping = aes(x= factor(clst_result), y = key), color ="red", size = 0.5) +
+  ggtitle(key)
+
+p_plt_boxjit
+
+ggsave2(p_plt_boxjit)
+
+p_plt_log2_boxjit <- ggplot()+theme_classic()+
+  geom_boxplot(data = d_plt, mapping =  aes(x= factor(clst_result), y = log2(key)),outlier.colour = NA) +
+  geom_jitter(data = d_plt, mapping = aes(x= factor(clst_result), y = log2(key)), color ="red", size = 0.5) +
+  ggtitle(key)
+
+p_plt_log2_boxjit
+
+ggsave2(p_plt_log2_boxjit)
+```
+
+
+
+```{r}
+key <- "patient.fetoprotein_outcome_value"
+
+d_afp <- d %>%
+  getKeyWord(key = key) %>%
+  mutate_(key = key)
+
+
+x <- d_afp %>%
+  dplyr::filter(clst_result == 1) %>%
+  .[[key]]
+y <- d_afp %>%
+  dplyr::filter(clst_result == 2) %>%
+  .[[key]]
+
+ks.test(x, y)
+
+p_afp_boxjit <- ggplot()+theme_classic()+
+  geom_boxplot(data = d_afp, mapping =  aes(x= factor(clst_result), y = key),outlier.colour = NA) +
+  geom_jitter(data = d_afp, mapping = aes(x= factor(clst_result), y = key), color ="red", size = 0.5) +
+  ggtitle(key)
+
+p_afp_boxjit
+ggsave2(p_afp_boxjit)
+
+p_afp_log_boxjit <- ggplot()+theme_classic()+
+  geom_boxplot(data = d_afp, mapping =  aes(x= factor(clst_result), y = log2(key)),outlier.colour = NA) +
+  geom_jitter(data = d_afp, mapping = aes(x= factor(clst_result), y = log2(key)), color ="red", size = 0.5) +
+  ggtitle(key)
+
+p_afp_log_boxjit
+
+```
+
+
+
+```{r}
+pt_abn <- d %>%
+  dplyr::filter(Row.names =="TCGA-DD-A4NR") %>%
+  t() %>%
+  as.data.frame() %>%
+  mutate(rown = rownames(.)) %>%
+  dplyr::filter(!is.na(V1))
+```
+
+
+
+##sessioninfo
+```{r}
+sessionInfo()
+Sys.time()
+Sys.info()
+```
+
+##function for save attached pkgs from sessioninfo
+```{r}
+ses2ris <- function(dir="./ses_ris", ver=T){
+  require("magrittr")
+  require("stringr")
+ 
+  if(!file.exists(dir)){
+    dir.create(dir)
+  }
+ 
+  end_out <- function(pac, ver, dir){
+    pac_ver <- packageVersion(pac)
+ 
+    if(ver){
+      out_file <- paste(pac, "_", pac_ver, ".ris",sep = "")
+    }else{
+      out_file <- paste(pac, ".ris",sep = "")
+    }
+    print(out_file)
+ 
+    ##pac_cit <- utils:::print.bibentry(citation(pac), style = "Bibtex")
+    pac_cit <- print(citation(pac),bibtex=TRUE)
+ 
+    double_q <- "\""
+    if(!is.na(pac_cit[1]$title)){
+      pac_cit[1]$title <- str_replace(pac_cit[1]$title, "---", ":")
+      pac_cit[1]$title <- str_replace_all(pac_cit[1]$title, "\\'", double_q)
+    }
+
+    capture.output(toBibtex(pac_cit),file = "tmp.bib")
+   
+    sys_code <- paste("bib2xml tmp.bib | xml2ris  > ", dir, "/", out_file, sep="")
+    print(sys_code)
+    system(sys_code)
+  }
+ 
+  pacs <- sessionInfo() %>%
+    .$otherPkgs %>%
+    names(.)
+  print(pacs)
+  sapply(X = pacs, FUN = end_out, ver=ver, dir=dir)
+ 
+  file.remove("./tmp.bib")
+}
+
+ses2ris()
+```
