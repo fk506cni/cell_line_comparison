@@ -1,0 +1,699 @@
+---
+title: "R388_tcga_gsva02"
+author: "fk506cni"
+date: "2020/12/12"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=T}
+knitr::opts_chunk$set(echo = TRUE, cache = T)
+```
+
+
+## functions
+```{r}
+outputdir <- "./figs/"
+
+ggsave2 <- function(plot, wid=9, hei=9){
+  plot_name <- deparse(substitute(plot))
+  file_name <- paste(outputdir,plot_name, ".png", sep = "",collapse = "")
+  ggsave(filename = file_name,plot = plot,device = "png",width = wid, height = hei,dpi = 300,units = "cm")
+}
+
+ggsave2_pdf <- function(plot, wid=9, hei=9){
+  plot_name <- deparse(substitute(plot))
+  file_name <- paste(outputdir,plot_name, ".pdf", sep = "",collapse = "")
+  ggsave(filename = file_name,plot = plot,device = "pdf",width = wid, height = hei,dpi = 300,units = "cm")
+}
+
+
+
+ggsave2_f <- function(plot,path, wid=9, hei=9){
+  plot_name <- deparse(substitute(plot))
+  file_name <- path
+    # paste(outputdir, plot_name, ".tif", sep = "",collapse = "")
+  ggsave(filename = file_name,plot = plot,device = "tiff",width = wid, height = hei,dpi = 300,units = "cm")
+}
+
+ggsave3 <- function(plot, path, wid=8.2, hei=8.2){
+  #plot_name <- deparse(substitute(plot))
+  plot_name <- path
+  file_name <- path
+  # file_name <- paste(plot_name, ".png", sep = "",collapse = "")
+  ggsave(filename = file_name,plot = plot,device = "png",width = wid, height = hei,dpi = 600,units = "cm")
+}
+
+df_all_chr <- function(df){
+  for (i in c(1, ncol(df))){
+    df[[i]] <- as.character(df[[i]])
+  }
+  return(df)
+}
+
+theme_ggh <- function(font.size=10,legend.position = "none", fam = "Arial") {
+  theme(axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.title = element_blank(),
+        axis.line = element_blank(),
+        axis.ticks = element_blank(),
+        plot.title = element_blank(),
+        panel.grid = element_blank(),
+        panel.border = element_blank(),
+        panel.spacing = element_blank(),
+        panel.background = element_blank(),
+        plot.background = element_blank(),
+        plot.margin = unit(c(0,0,0,0),"cm"),
+        text = element_text(family = fam ,size=font.size,lineheight = 0.7)
+        # ,
+        # legend.position = "none")
+  )
+}
+
+inch2cm <- function(x){
+  return(x/0.39370)
+}
+cm2inch <- function(x){
+  return(0.39370*x)
+}
+
+p2cm <- function(x){
+  return(as.integer(0.008466666666666667 * x))
+}
+
+cm2p <- function(x){
+  return(as.integer(118.11023622047244 *x))
+}
+
+ggsave2_pptx <- function(plot, wid=9, hei=9){
+  
+  library(officer)
+  library(rvg)
+  
+  plot_name <- deparse(substitute(plot))
+  file_name <- paste(outputdir,plot_name, ".pptx", sep = "",collapse = "")
+  plot_ed <- rvg::dml(ggobj = plot,width = wid, height = hei)
+  
+  doc <- read_pptx() %>%
+    add_slide('Title and Content', 'Office Theme') %>%
+    ph_with(value = "", location = ph_location_type(type = "title")) %>%
+    ph_with(value = plot_ed, location = ph_location(type = "body",width = cm2inch(wid), height = cm2inch(hei),left = 2, top = 2))
+  doc %>%
+    print(target = file_name)
+}
+
+
+ggsave3_pptx <- function(plot, file_name, wid=9, hei=9){
+  
+  library(officer)
+  library(rvg)
+  
+  # plot_name <- deparse(substitute(plot))
+  # file_name <- paste("../figs_output/",plot_name, ".pptx", sep = "",collapse = "")
+  # file_name <- paste(file_name, ".pptx", sep = "",collapse = "")
+  plot_ed <- rvg::dml(ggobj = plot,width = wid, height = hei)
+  
+  doc <- read_pptx() %>%
+    add_slide('Title and Content', 'Office Theme') %>%
+    ph_with(value = "", location = ph_location_type(type = "title")) %>%
+    ph_with(value = plot_ed, location = ph_location(type = "body",width = cm2inch(wid), height = cm2inch(hei),left = 2, top = 2))
+  doc %>%
+    print(target = file_name)
+}
+
+
+
+#paste and print
+pp <- function(..., sep= "", rtn = FALSE){
+  s <- paste(..., sep = sep)
+  if(rtn){
+    return(s)
+  }else{
+    cat(s)
+  }
+}
+
+# -の表現ブレ問題
+coerceNeg <- function(v){
+  v <- v %>%
+    str_remove_all(., "\\(") %>%
+    str_remove_all(., "\\)") %>%
+    str_replace(., "－", "-")
+  v2 <- case_when(
+    v == "+" ~ "pos",
+    v == "-" ~ "neg",
+    v == "ー"~ "neg",
+    v == "‑" ~ "neg",
+    v == "‐" ~ "neg",
+    v == "–" ~ "neg",
+    v == "—" ~ "neg",
+    v == "―" ~ "neg",
+    v == "ｰ" ~ "neg",
+    v == "−" ~ "neg",
+    v == "－" ~ "neg",
+    T ~ NA_character_)
+  return(v2)
+}
+
+
+showFigMkdwn <- function(path, wid =6, hei = 9){
+  wid <- as.character(cm2p(wid))
+  # wid <- as.character(pcnt)
+  # hei <- cm2p(hei)
+  # pp("![](",path, " =",wid,"x)")
+  # pp("<img src=\"", filepath())
+  # pp("<img src=", path, " width=\"", wid, "\"/>")
+  pp("<img src=", path, " width=", wid, "/>")
+  # pp("<img src=", path, " width=\"", pcnt, "%\"/>")
+  # <img src="drawing.jpg" alt="drawing" width="200"/>
+}
+showFigMkdwn("path2hell")
+
+
+
+get_Coefs <- function(m){
+  m <-  summary(m)$coefficients %>%
+  as.data.frame() %>%
+  mutate(val = rownames(.),
+         or = exp(`Estimate`),
+           or_low =exp(`Estimate` -1.96*`Std. Error`),
+           or_high = exp(`Estimate` +1.96*`Std. Error`)) %>%
+  mutate(or_str = or %>%
+           round(., digits = 2) %>%
+           as.character(),
+         or_low_str = or_low %>%
+           round(., digits = 2) %>%
+           as.character(),
+         or_high_str = or_high %>%
+           round(., digits = 2) %>%
+           as.character()) %>%
+  mutate(or_ci = str_c(or_str,
+                       "(",
+                       or_low_str,
+                       "-",
+                       or_high_str,
+                       ")")) %>%
+  mutate(p_val_str = case_when(
+    `Pr(>|z|)` < 0.01 ~ "<0.01",
+    `Pr(>|z|)` < 0.1 ~ as.character(round(`Pr(>|z|)`, digits = 3)),
+    T ~as.character(round(`Pr(>|z|)`, digits = 2))
+  ))  %>%
+  dplyr::select(val,
+                or_ci,
+                p_val_str,
+                everything())
+  return(m)
+}
+```
+## make gmts
+
+```{r}
+require(tidyverse)
+require(data.table)
+
+library(Biobase)
+library(genefilter)
+library(limma)
+library(RColorBrewer)
+library(GSVA)
+
+library(GSEABase)
+library(GSVAdata)
+```
+
+```{r}
+f_ga2 <- "../87_2garray_re_mod/2Garray.annot_2.txt"
+df_org <- fread(f_ga2)
+```
+
+```{r}
+deg <- df_org %>%
+  dplyr::filter(q.value < 0.0001) %>%
+  dplyr::select(c("Row.names", "gene_cluster", "Entrez.Gene")) %>%
+  mutate(gene_id = Entrez.Gene %>%
+           str_extract("^[0-9]*"))
+id_a <- deg %>%
+  dplyr::filter(gene_cluster == "A") %>%
+  .[["Entrez.Gene"]] %>%
+  .[!duplicated(.)] %>%
+  .[. != "---"] %>%
+  str_c(., collapse="\t")
+id_b <- deg %>%
+  dplyr::filter(gene_cluster == "B") %>%
+  .[["Entrez.Gene"]] %>%
+  .[!duplicated(.)] %>%
+  .[. != "---"] %>%
+  str_c(., collapse="\t")
+
+df_gmt <- data.frame(tag = c("A_genes", "B_genes"),
+                     url = c("",""),
+                     ids = c(id_a, id_b))
+
+f_gmt_custom <- "./gmts/custm.gmt"
+write.table(x = df_gmt, file = f_gmt_custom, sep = "\t", row.names = F, col.names = F, quote = F)
+```
+
+## gsva preparation
+```{r}
+gs <-  getGmt(f_gmt_custom, 
+             geneIdType = EntrezIdentifier())
+```
+
+```{r}
+f_clin <- "../126TCGA_Celllinecomparison_mod/clst_clin2.csv"
+df_clin <- fread(f_clin)
+f_rna <- "./LIHC.rnaseqv2__illuminahiseq_rnaseqv2__unc_edu__Level_3__RSEM_genes_normalized__data.data.txt"
+df_rna_org <- fread(f_rna)
+```
+
+```{r}
+allNum <- function(df){
+  for(i in 1:ncol(df)){
+    df[,i] <- as.numeric(df[,i])
+  }
+  return(df)
+}
+
+
+clin_sub <- df_clin %>%
+  mutate(clst = ifelse(clst_result ==1, "major", "minor") %>%
+           factor(, levels = c("minor", "major"))) %>%
+  dplyr::select(clst, sampe_tag)
+# sampe_tag
+# gs$sub_type <- df_clin$sampe_tag
+
+# gs <- GeneSetCollection()
+
+
+df_rna <- df_rna_org %>%
+  as.data.frame() %>%
+  .[,c(1:ncol(.))[as.character(.[1,]) %in% c("gene_id", "normalized_count")]] %>%
+  mutate(`Hybridization REF` = `Hybridization REF` %>%
+           str_remove_all("^[-?A-Z0-9]*\\|")) %>%
+  dplyr::filter(`Hybridization REF` != "gene_id") %>%
+  dplyr::select(`Hybridization REF`, one_of(clin_sub$sampe_tag)) %>%
+  as.data.frame() %>%
+  `rownames<-`(.[["Hybridization REF"]]) %>%
+  .[,2:ncol(.)]  %>%
+  allNum() %>%
+  .[apply(., 1, mad) > 1,] %>%
+   as.matrix()
+# apply(df_rna, MARGIN = 1, mad)
+
+
+df_rna[1:10, 1:10]
+dim(df_rna)
+tags <- colnames(df_rna)
+```
+
+#gsva
+```{r}
+g_res <- gsva(expr = df_rna,
+              gset.idx.list = gs,
+              kcdf="Poisson")
+
+openxlsx::write.xlsx(x = g_res, file = "./gres.xlsx")
+```
+
+result check
+```{r}
+f_xx <- "../126TCGA_Celllinecomparison_mod/R126_mod_pt_heat.table_re.xlsx"
+df_x <- openxlsx::read.xlsx(xlsxFile = f_xx) %>%
+  mutate(rws_col = 
+           case_when(
+             is.na(X1) ~ "",
+             X1 == "major"~"salmon",
+             X1 == "minor"~ "cyan",
+             T ~ ""
+           ))
+df_xsub <- df_x %>%
+  dplyr::select(rws_col, X1, entrez) %>%
+  dplyr::filter(!is.na(X1)) %>%
+  mutate(ind = 1:nrow(.))
+
+cls_order <- df_x$entrez %>%
+  .[!. %in% c("entrez", "symbol", "geneclass")]
+# rws <- df_x$rws_col %>%
+#   .[!is.na(.)] %>%
+#   .[. !=""]
+g_t <- g_res  %>%
+  as.data.frame() %>%
+  mutate(rn = rownames(.)) %>%
+  dplyr::select(rn, one_of(cls_order)) %>%
+  as.data.frame() %>%
+  `rownames<-`(.[["rn"]]) %>% 
+  .[,colnames(.) != "rn"] %>%
+  t() %>%
+  .[,c(2,1)]
+  # 
+  # t() %>%
+  # as.data.frame()
+```
+
+```{r}
+g_t2 <- merge(g_t, df_xsub, by.x=0, by.y="entrez") %>%
+  mutate(A_genes = as.numeric(A_genes),
+         B_genes = as.numeric(B_genes)) %>%
+  dplyr::arrange(ind)
+g_t2_mat <- g_t2[,2:3] %>%
+  as.matrix()
+```
+
+```{r}
+require(gplots)
+# heatmap.2(x = g_t2_mat,
+#           scale="none",labRow = F,
+#                   dendrogram = "none", trace = "none", Rowv = F, Colv = F,RowSideColors = g_t2$rws_col,
+#                   col = greenred(75)
+                  # )
+h1 <- heatmap.2(x = g_t2_mat,Rowv = F,Colv = F,dendrogram = "none",col = bluered(256),trace = "none",cexCol = 1,labRow = F,srtCol = 45, main = "Gene Enrichment",ColSideColors = c("blue", "red"),RowSideColors = g_t2$rws_col,symbreaks=F,symm=F,symkey=F)
+```
+
+
+
+visualization
+
+
+```{r}
+# ColV = F
+# RowV = F
+# colname_label = F
+# rowname_label = F
+# colslider = c("red", "blue")
+# rowslider= rws_col 
+# colangle = 45
+# rowangle=45
+# key.axis.fontsize = 10
+# 
+# clst_method="average"
+# dist_method="spearman"
+# colours=c("blue", "white", "red")
+# ColV = T
+# RowV = F
+# colname_label = F
+# rowname_label = F
+# colslider = clst_result$V2
+# rowslider=rowlabel
+# colangle = 45
+# rowangle=45
+# key.axis.fontsize = 10
+# add_p = b1
+# clst_method="average"
+# dist_method="spearman"
+colours=c("blue", "white", "red")
+
+ggheat <- function(df,
+                   clst_method="average",
+                   dist_method="spearman",
+                   colslider, rowslider,
+                   ColV=T, RowV=T,
+                   colname_label=T, rowname_label=T,
+                   colangle=45, rowangle=45,
+                   colours=c("blue", "white", "red"),
+                   key.axis.fontsize=12,
+                   main="title",
+                   add_p=NULL,
+                   lmat=NULL,
+                   lhei=NULL,lwid=NULL,
+                   font.size=10){
+  require(ggplot2)
+  require(reshape2)##for melting
+  require(grid)
+  require(gridExtra)
+  require(ggdendro)
+  require(scales)
+  ##common theme function
+  theme_ggh <- function(font.size=10) {
+              theme(axis.text.x = element_blank(),
+              axis.text.y = element_blank(),
+              axis.title = element_blank(),
+              axis.line = element_blank(),
+              axis.ticks = element_blank(),
+              plot.title = element_blank(),
+              panel.grid = element_blank(),
+              panel.border = element_blank(),
+              panel.spacing = element_blank(),
+              panel.background = element_blank(),
+              plot.background = element_blank(),
+              plot.margin = unit(c(0,0,0,0),"cm"),
+              text = element_text(family = "Arial",size=font.size,lineheight = 0.7),
+              legend.position = "none"
+)
+  }
+  
+  ##blank grid for plotting blank
+  blank_grid <- grid.rect(gp=gpar(col="white"))
+
+  df <- as.data.frame(df)
+  
+  ##clustering if needed
+  if(ColV==T){
+     dist_x <- as.dist(1-cor(as.matrix(df),method = dist_method))
+     clst_x <- hclust(dist_x,method = clst_method)
+     df <- df[,clst_x$order]
+     colslider <- colslider[clst_x$order]
+  }
+  
+  if(RowV==T){
+     dist_y <- as.dist(1-cor(as.matrix(t(df)),method = dist_method))
+     clst_y <- hclust(dist_y,method = clst_method)
+     df <- df[clst_y$order,]
+     rowslider <- rowslider[clst_y$order]
+  }
+  
+  ##matrix prepareation
+  colname <- colnames(df)
+  colname <- data.frame(text=colname, x=c(1:length(colname)),colslider=colslider)
+  colnames(df) <- c(1:ncol(df))
+  
+  rowname <- rownames(df)
+  rowname <- data.frame(text=rowname, y=c(1:length(rowname)),rowslider=rowslider)
+  rownames(df) <- c(1:nrow(df))
+  
+  df4out <- df
+  row.names(df4out) <- rowname$text
+  colnames(df4out) <- colname$text
+  tiledata <- melt(as.matrix(df))
+  
+  ##heatmap is p1
+  p1 <- ggplot()+
+        geom_tile(data = tiledata, mapping = aes(x=Var2, y = Var1, fill=value))+
+        scale_x_continuous(expand=c(0,0))+ 
+        scale_y_continuous(expand=c(0,0))+
+        scale_fill_gradient2(low = colours[1],mid = colours[2],high = colours[3],midpoint = (max(tiledata$value)+min(tiledata$value))/2)+
+        guides(fill=F)+
+        theme_ggh()+coord_flip()
+  p1
+
+  ##colslider is cols
+  cols <- ggplot()+
+          geom_tile(data=colname,aes(x=x,y=0,fill=colslider))+
+          scale_x_continuous(expand=c(0,0))+ 
+          scale_y_continuous(expand=c(0,0))+
+          scale_fill_identity(guide = "legend")+
+          theme_ggh()+
+      coord_flip()
+  #cols
+  
+  ##rowslider is rows
+  rows <- ggplot()+
+          geom_tile(data=rowname,aes(x=0,y=y,fill=rowslider))+
+          scale_x_continuous(expand=c(0,0))+ 
+          scale_y_continuous(expand=c(0,0))+
+          scale_fill_identity(guide = "legend")+
+          theme_ggh()+
+      coord_flip()
+  rows
+  
+  ##col dendrogram if needed
+  if(ColV==T){
+    coldend <- as.dendrogram(clst_x)
+    #plot(coldend)
+    coldend <- segment(dendro_data(coldend))
+    cold <- ggplot()+
+            geom_segment(data=coldend,aes(x=x, y=y, xend=xend, yend=yend))+
+            scale_x_continuous(expand=c(0,0),limits = c(0.5,max(coldend$xend)+0.5))+ 
+            scale_y_continuous(expand=c(0,0))+
+            theme_ggh()+
+      coord_flip()
+    #cold
+  }else{
+    cold <- blank_grid
+  }
+  
+  ##row dendrogram if needed
+  if(RowV==T){
+    rowdend <- as.dendrogram(clst_y)
+    #plot(rowdend)
+    rowdend <- segment(dendro_data(rowdend))
+    rowd <- ggplot()+
+            geom_segment(data = rowdend,aes(x=x, y=y, xend=xend, yend=yend))+
+            scale_x_continuous(expand=c(0,0),limits = c(0.5,max(rowdend$xend)+0.5))+ 
+            scale_y_reverse(expand=c(0,0))+
+            theme_ggh()
+    #rowd
+  }else{
+    rowd <- blank_grid
+  }
+  
+  ##key histgram(density plot)
+  key_hist <- hist(tiledata$value,breaks = 50,plot = F)
+  max_hist <- max(key_hist$density)
+  key_density <- data.frame(range=seq(min(tiledata$value)-1, max(tiledata$value)+1, 0.02))
+  key_density_range <- density(tiledata$value)
+  
+  key <-  ggplot()+
+          geom_tile(data = key_density, 
+                    mapping = aes(x = range, y=max_hist/2*1.2,fill=range,width=0.02, height=max_hist*1.2),
+                    show.legend = F)+
+          scale_fill_gradient2(low = colours[1],mid = colours[2],high = colours[3],
+                               midpoint = (max(tiledata$value)+min(tiledata$value))/2,
+                               
+                                limits=c(min(tiledata$value),max(tiledata$value)),
+                               oob=squish) +
+          scale_x_continuous(expand=c(0,0))+
+          scale_y_continuous(expand=c(0,0))+
+          geom_histogram(data = tiledata,mapping = aes(x=value,y=..density..),
+                         alpha=0.8, binwidth = (max(tiledata$value)-min(tiledata$value))/50)+
+          guides(fill=F,colour=F)+xlab("")+ylab("")+
+          theme_classic()+
+          theme(text = element_text(family = "Arial",size=font.size,lineheight = 0.7),
+                axis.text.x =  element_text(family = "Arial",size=key.axis.fontsize),
+                axis.text.y =  element_text(family = "Arial",size=key.axis.fontsize),
+                plot.margin = unit(c(0,0,-0.02,-0.015),"native"))
+  
+  ##colnames
+  if(colname_label==T){
+    colname_label <- ggplot()+
+                geom_text(data=colname,mapping = aes(x=x,y=0, label=text,angle=colangle),
+                          size=3,hjust=0)+
+                scale_x_continuous(expand=c(0,0),limits = c(min(colname$x)-0.5, max(colname$x)+0.5))+
+                scale_y_continuous(expand=c(0,0),limits = c(0,1))+
+                theme_ggh()
+    colname_table <- ggplot_gtable(ggplot_build(colname_label))
+    colname_table$layout$clip[colname_table$layout$name=="panel"] <- "off"
+    #class(colname_table)
+    #colname_label
+  }else{
+    colname_label <- blank_grid
+    colname_table <- blank_grid
+  }
+  
+  ##rownames
+  if(rowname_label==T){
+    rowname_label <- ggplot()+
+                geom_text(data = rowname,mapping = aes(x=0,y=y, label=text,angle=rowangle),
+                          size=3,hjust=0)+
+                scale_x_continuous(expand=c(0,0),limits = c(0,0.05))+
+                scale_y_continuous(expand=c(0,0),limits = c(min(rowname$y)-0.5, max(rowname$y)+0.5))+
+                theme_ggh()
+    rowname_table <- ggplot_gtable(ggplot_build(rowname_label))
+    rowname_table$layout$clip[rowname_table$layout$name=="panel"] <- "off"
+    #rowname_label
+  }else{
+    rowname_label <- blank_grid
+    rowname_table <- blank_grid
+  }
+  
+  if(!is.null(add_p)){
+    add <- add_p
+  }else{
+    add <- blank_grid
+  }
+  !is.null(add_p)
+  #add <- b1
+
+  ##layout
+  if(is.null(lmat) | is.null(lwid) | is.null(lhei)){
+    lmat <- rbind(c(7,7,1,1,1,1),
+                  c(7,7,5,1,1,1),
+                  c(7,7,3,1,1,1),
+                  c(6,4,2,9,10,1),
+                  c(1,1,8,1,1,1))
+    lwid <- c(0.2, 0.1, 1, 0.1,0.5,0.01)
+    lhei <- c(0.1,0.2,0.1,2,0.01)
+  }
+
+
+  grid_p <- grid.arrange(blank_grid,#1
+               p1,#2
+               cols,#3
+               rows,#4
+               cold,#5
+               rowd,#6
+               key,#7
+               colname_table,#8
+               rowname_table,#9
+               add,#10
+               layout_matrix=lmat,heights=lhei, widths=lwid,
+               top=textGrob(main, gp=gpar(fontsize=20,fontfamily="Arial")))
+  grid.draw(grid_p)
+  result <- list()
+  result[["plot_data"]] <- grid_p
+  if(ColV==T){
+    result <- c(result, clst_x=list(clst_x))
+  }
+  
+  if(RowV==T){
+    result <- c(result, clst_y=list(clst_y))
+  }
+  
+  result$df <- df4out
+  result$tiledata <- tiledata
+  return(result)
+}
+
+#ggheat(df = h,ColV = T,RowV = F,colname_label = T,rowname_label = F,colslider = colslider, rowslider=rowlabel,colangle = 90,rowangle=0,key.axis.fontsize = 10,main="demo_hist",add_p = b1)
+
+
+lmat = rbind(c(7,7,1,1,1,1),
+                     c(7,7,5,1,1,1),
+                     c(7,7,3,1,1,1),
+                     c(6,4,2,9,10,1),
+                     c(1,1,8,1,1,1))
+lmat2 = rbind(c(10,10,10,7,7,7),
+              c(10,10,10,7,7,7),
+              c(4,4,4,7,7,7),
+              c(2,2,2,3,5,1),
+              c(1,6,8,9,1,1))
+gh_result <- ggheat(df = g_t2_mat,
+       ColV = F,RowV = F,
+       colname_label = F,
+       rowname_label = F,
+       # colslider = rowlabel,
+       # rowslider=clst_result$V2,
+       colslider = c("blue", "red"),
+       rowslider=g_t2$rws_col,
+       colangle = 45,rowangle=45,
+       key.axis.fontsize = 10,main="GSVA in TCGA HCC",
+       add_p = NULL,
+       lmat = lmat2,
+      lwid = c(0.2, 0.1, 1, 0.15,0.4,0.01),
+      lhei = c(0.2,0.2,0.1,1,0.01)
+      )
+
+
+grid::grid.draw(gh_result$plot_data)
+
+f_p <- "./R388_gvsa_ABgenes.png"
+f_p2 <- "./R388_gvsa_ABgenes.tif"
+R388_gvsa_ABgenes <- gh_result$plot_data
+ggsave2(plot = R388_gvsa_ABgenes,hei = 12, wid=15)
+ggsave2_f(plot = R388_gvsa_ABgenes, path = f_p2,hei = 12, wid=15)
+```
+
+
+
+
+```{r}
+# gplots::heatmap.2(x = g_t,key=T, keysize=1.5,
+# density.info="none", trace="none",cexCol=0.9, dendrogram = "none")
+
+```
+
+
+```{r}
+sessionInfo()
+```
+

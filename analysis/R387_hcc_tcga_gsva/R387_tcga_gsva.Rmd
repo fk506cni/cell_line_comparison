@@ -1,0 +1,189 @@
+---
+title: "R387_tcga_gsva"
+author: "fk506cni"
+date: "2020/12/11"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## gsva tut
+
+```{r}
+# BiocManager::install("GSVA")
+require("GSVA")
+
+library(GSEABase)
+library(GSVAdata)
+# data(c2BroadSets)
+# 
+# c2BroadSets
+```
+
+```{r}
+library(Biobase)
+library(genefilter)
+library(limma)
+library(RColorBrewer)
+library(GSVA)
+
+require(data.table)
+```
+
+```{r}
+# cacheDir <- system.file("extdata", package="GSVA")
+# cachePrefix <- "cache4vignette_"
+# file.remove(paste(cacheDir, list.files(cacheDir, pattern=cachePrefix), sep="/"))
+```
+
+
+```{r}
+# data(leukemia)
+# leukemia_eset
+# 
+# head(pData(leukemia_eset))
+# pData(leukemia_eset)
+# 
+# table(leukemia_eset$subtype)
+```
+
+
+```{r}
+# filtered_eset <- nsFilter(leukemia_eset, require.entrez=TRUE, remove.dupEntrez=TRUE,
+#                           var.func=IQR, var.filter=TRUE, var.cutoff=0.5, filterByQuantile=TRUE,
+#                           feature.exclude="^AFFX")
+# 
+# filtered_eset
+# leukemia_filtered_eset <- filtered_eset$eset
+# 
+# cache(leukemia_es <- gsva(leukemia_filtered_eset, c2BroadSets,
+#                           min.sz=10, max.sz=500, verbose=TRUE),
+#       dir=cacheDir, prefix=cachePrefix)
+# 
+# adjPvalueCutoff <- 0.001
+# logFCcutoff <- log2(2)
+```
+
+
+```{r}
+# design <- model.matrix(~ factor(leukemia_es$subtype))
+# colnames(design) <- c("ALL", "MLLvsALL")
+# fit <- lmFit(leukemia_es, design)
+# fit <- eBayes(fit)
+# allGeneSets <- topTable(fit, coef="MLLvsALL", number=Inf)
+# DEgeneSets <- topTable(fit, coef="MLLvsALL", number=Inf,
+# p.value=adjPvalueCutoff, adjust="BH")
+# res <- decideTests(fit, p.value=adjPvalueCutoff)
+# summary(res)
+```
+
+
+```{r}
+# data(gbm_VerhaakEtAl)
+# gbm_eset
+# head(featureNames(gbm_eset))
+# 
+# data(brainTxDbSets)
+# sapply(brainTxDbSets, length)
+# lapply(brainTxDbSets, head)
+```
+
+```{r}
+f <- "./gmts/c5.go.bp.v7.2.entrez.gmt"
+f <- "./gmts/c2.cp.kegg.v7.2.entrez.gmt"
+# require(GSEABase)
+# gs <- getGmt(f, 
+#              geneIdType = EntrezIdentifier(),
+#              collectionType = BroadCollection(category = "c5"))
+gs <- getGmt(f, 
+             geneIdType = EntrezIdentifier(),
+             collectionType = BroadCollection(category = "c2"))
+# gs_f <- nsFilter(gs)
+
+# gs
+```
+
+```{r}
+f_clin <- "../126TCGA_Celllinecomparison_mod/clst_clin2.csv"
+df_clin <- fread(f_clin)
+
+
+# f_rna <- "../126TCGA_Celllinecomparison_mod/gdac.broadinstitute.org_LIHC.Merge_rnaseqv2__illuminahiseq_rnaseqv2__unc_edu__Level_3__RSEM_genes__data.Level_3.2016012800.0.0/LIHC.rnaseqv2__illuminahiseq_rnaseqv2__unc_edu__Level_3__RSEM_genes__data.data.txt"
+f_rna <- "./LIHC.rnaseqv2__illuminahiseq_rnaseqv2__unc_edu__Level_3__RSEM_genes__data.data.txt"
+df_rna_org <- fread(f_rna)
+```
+
+```{r}
+require(tidyverse)
+allNum <- function(df){
+  for(i in 1:ncol(df)){
+    df[,i] <- as.numeric(df[,i])
+  }
+  return(df)
+}
+
+
+clin_sub <- df_clin %>%
+  mutate(clst = ifelse(clst_result ==1, "major", "minor") %>%
+           factor(, levels = c("minor", "major"))) %>%
+  dplyr::select(clst, sampe_tag)
+# sampe_tag
+# gs$sub_type <- df_clin$sampe_tag
+
+# gs <- GeneSetCollection()
+
+
+df_rna <- df_rna_org %>%
+  as.data.frame() %>%
+  .[,c(1:ncol(.))[as.character(.[1,]) %in% c("gene_id", "raw_count")]] %>%
+  mutate(`Hybridization REF` = `Hybridization REF` %>%
+           str_remove_all("^[-?A-Z0-9]*\\|")) %>%
+  dplyr::filter(`Hybridization REF` != "gene_id") %>%
+  dplyr::select(`Hybridization REF`, one_of(clin_sub$sampe_tag)) %>%
+  as.data.frame() %>%
+  `rownames<-`(.[["Hybridization REF"]]) %>%
+  .[,2:ncol(.)]  %>%
+  allNum() %>%
+  .[apply(., 1, mad) > 1,] %>%
+   as.matrix()
+# apply(df_rna, MARGIN = 1, mad)
+
+
+df_rna[1:10, 1:10]
+dim(df_rna)
+tags <- colnames(df_rna)
+
+```
+
+
+```{r}
+g_res <- gsva(expr = df_rna,
+              gset.idx.list = gs,
+              kcdf="Poisson")
+
+
+```
+
+```{r}
+sum(tags == clin_sub$sampe_tag)
+clin_sub$clst
+pvalue <- NULL
+for(i in 1:nrow(g_res)){                 #遺伝子セット数に相当するnrow(out)回だけループを回す
+    pvalue <- c(pvalue, 
+                wilcox.test(g_res[i,clin_sub$clst=="major"],
+                            g_res[i,clin_sub$clst== "minor"])$p.value)
+    #p値を計算した結果をどんどんpvalueに格納
+}
+
+```
+
+
+```{r}
+df_res <- cbind(rownames(g_res), pvalue, g_res)
+```
+
+

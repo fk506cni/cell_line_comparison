@@ -1,0 +1,63 @@
+---
+title: "R387_xp_pca_re"
+author: "fk506cni"
+date: "2020/12/10"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+## cell line pca
+```{r}
+require(tidyverse)
+require(data.table)
+```
+
+
+
+```{r}
+f <- "../87_2garray_re_mod/2Garray.annot_2.txt"
+celdir <- "../87_2garray_re_mod/"
+```
+
+```{r}
+df_org <- fread(f)
+df <- df_org %>%
+  dplyr::select(one_of(c("Row.names")), starts_with("A_"),starts_with("B_")) %>%
+  dplyr::select(-contains("_avg")) %>%
+  as.data.frame() %>%
+  `rownames<-`(.[["Row.names"]]) %>%
+  .[,colnames(.) != "Row.names"]
+# %>%
+#   .[,str_detect(colnames(.),"^A_|^B_")]
+df_t <- t(df) %>%
+  as.data.frame()
+
+f4dapc <- "./df4dapc.txt"
+# write.table(x = df_t, file = f4dapc, sep = "\t", quote = F, col.names = NA, row.names = T)
+# df_t2 <- read.table(f4dapc, header=T, sep="\t")
+```
+
+```{r}
+require(adegenet)
+dat <- read.table(system.file("files/AFLP.txt",package="adegenet"), header=TRUE)
+dat
+dat2 <- df_t[,1:20]
+# dat2 <- df_t
+max_dat2 <- max(as.matrix(dat2))
+min_dat2 <- min(as.matrix(dat2))
+dat2 <- (dat2 - min_dat2)/(max_dat2 -min_dat2)
+dat2
+# dat <- read.table(f4dapc, header=T)
+# obj <- adegenet::re
+
+# obj <- df2genind(dat,ploidy = 1)
+obj <- df2genind(dat2,ploidy = 1)
+obj
+
+
+grp <- find.clusters(obj, max.n.clust = 40)
+tb1 <- t(obj$tab)
+
+head(tb1)
+```

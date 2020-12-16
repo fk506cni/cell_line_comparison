@@ -1,0 +1,130 @@
+---
+title: "R390_limore_check"
+author: "fk506cni"
+date: "2020/12/12"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R390_limore_check
+
+```{r}
+require(tidyverse)
+require(data.table)
+```
+
+
+```{r}
+f_ga2 <- "../87_2garray_re_mod/2Garray.annot_2.txt"
+df_ga2_org <- fread(f_ga2)
+df_deg <- df_ga2_org %>%
+  dplyr::filter(q.value < 0.0001) %>%
+  dplyr::select(c("Row.names", "gene_cluster", "Entrez.Gene", "Gene.Symbol", "avg_sub")) %>%
+  mutate(gene_id = Entrez.Gene %>%
+           str_extract("^[0-9]*")) %>%
+  dplyr::arrange(avg_sub) %>%
+  mutate(rowcol = ifelse(gene_cluster == "A", "red", "blue"))
+```
+
+```{r}
+f_anot <- "./81clinic_information.txt"
+anot <- fread(f_anot)
+
+f_rna <- "./HCC81.proteinGenes.fpkm_table.log2.txt"
+df_rna_org <- fread(f_rna)
+df_rna <- df_rna_org %>%
+  rename(Gene.Symbol = gene)
+```
+
+```{r}
+df_rna_lim <- df_deg %>%
+  dplyr::left_join(df_rna, on= "Gene.Symbol") %>%
+  dplyr::filter(!is.na(means)) %>%
+  dplyr::filter(!duplicated(Gene.Symbol))
+
+```
+
+```{r}
+acells <- c("Hep3B", "HepG2","Huh1", "Huh6", "Huh7", "JHH5", "JHH7", "PLCPRF5")
+bcells <- c("HLE", "HLF", "JHH2","JHH4", "Li7", "SNU182", "SNU387", "SNU423", "SNU449", "SNU475", "SNU761","SNU886")
+chncells <- anot$`Cell line` %>%
+  .[str_detect(., "^CLC")]
+others <- anot$`Cell line` %>%
+  .[! . %in% c(acells, bcells, chncells)]
+
+df_rna_lim_mat <- df_rna_lim %>%
+  dplyr::select(-one_of(c("Row.names", "gene_cluster", "Entrez.Gene", "avg_sub","means", "sds","gene_id", "rowcol"))) %>%
+  as.data.frame() %>%
+  `rownames<-`(.[["Gene.Symbol"]]) %>%
+  .[,colnames(.) != "Gene.Symbol"] %>%
+  as.matrix()
+
+
+colcols <- df_rna_lim_mat %>%
+  colnames()
+colcols <-   case_when(
+    colcols %in% acells ~ "red",
+    colcols %in% bcells ~ "blue",
+    colcols %in% chncells ~ "green",
+    colcols %in% others ~ "black",
+    T~ "white"
+  )
+```
+
+```{r}
+require(gplots)
+lm<-matrix(c(6,6,4,
+             6,6,1,
+             5,2,3),
+           ncol=3)
+lm
+l_wid <- c(1.2,0.6,6)
+l_hei <- c(1.4,0.6,4)
+mg <- c(5,5)
+cxCl <- 0.6
+plot.new()
+tiff(filename = "SupFig_X..R390_limore_check.tiff", #filenameでファイル名を指定
+     width = 2100, height = 1500, units = "px", #widthで幅、heightで高さのピクセルを指定
+     bg = "white", res = 300)
+
+
+h1 <-  heatmap.2(x = df_rna_lim_mat,
+                 Rowv = T,Colv = T,
+                 dendrogram = "both",col = bluered(256),trace = "none",
+                 cexCol = cxCl,labCol = NULL,labRow = NULL,srtCol = 60, main = "LIMORE RNASeq",
+                 ColSideColors = colcols,
+                 RowSideColors = df_rna_lim$rowcol,symbreaks=F,symm=F,symkey=F,
+                 lwid = l_wid, lhei = l_hei, lmat = lm, margins = mg
+                 )
+
+dev.off()
+
+# plot.new()
+# 
+# tiff(filename = "SupFig_X..R390_limore_check.tiff", #filenameでファイル名を指定
+#      width = 1920, height = 1200, units = "px", #widthで幅、heightで高さのピクセルを指定
+#      bg = "white")
+# 
+# dev.off()
+
+plot.new()
+plot(h1)
+```
+
+
+
+
+```{r}
+# rstudioapi::versionInfo()
+sessionInfo()
+```
+
+```{r}
+# rstudioapi::versionInfo()
+```
+

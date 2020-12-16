@@ -5,6 +5,7 @@ Starting materials such as "CCLE_Expression.Arrays_2013-03-18.tar.gz" are not de
 Please get them from Broad Institute, TCGA, NCBI GEO and so on.  
 
 
+
 Description of each file and the purpose.
 
 - 77GEarray_re 
@@ -13,6 +14,9 @@ Description of each file and the purpose.
 - 87_2garray_re_mod
     - Clustering in liver cancer cell lines.
     - DEG analysis in liver cancer cell line cluster.
+
+- R385_cellline_pca
+    - Principal Component Analysis about liver cancer cell lines
 
 - 103_g2array_david _mod
     - Gene ontology enrichment analysis using DAVID
@@ -25,12 +29,15 @@ Description of each file and the purpose.
 
 - 157clin_clust_anals_mod
     - Analysis clinical sample cluster
+    - survival analysis is done
 
 - R174_cln_clst_re
     - Analysis clinical sample cluster
+    - several clinical information, such as age, bmi, and fetoprotein was evaluated.
 
 - R176_clin_clst_expanal_re_mod
     - Analysis clinical sample cluster
+    - sample information such as percent tumor cell was evalueted.
 
 - 137PCA_renormalize_redo
     - Comparison of expression pattern using Primary Cell Atlas
@@ -62,8 +69,6 @@ Description of each file and the purpose.
 
 - R400_dapc_test
     - DAPC analysis about CCLE microarray data
-
-
 
 
 

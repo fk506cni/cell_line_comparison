@@ -1,0 +1,82 @@
+Cell line	Ethnicity	Age	Gender	Virus	Tissue type	Liver lobe	Cancer Type	Grade	Inflammation	Vascular invasion	Hep-1	HBsAg	CD34	GPC3	OPN	AFP ng/mL	CEA ng/mL	CA199 U/mL	ALB g/L	ALT U/L	AST U/L	TBIL umol/L
+CLC1	Chinese	50	male	HBV	Surgery	right	HCC	III	G2S2	negative	+	+	+	NA	NA	2.9	3.6	16.7	48.5	20	30	20.5
+CLC10	Chinese	65	male	HBV	Surgery	middle	HCC	II	G2S4	NA	-	+	+	-	+++	3.1	2.5	25.2	40.2	22	36	23.6
+CLC11	Chinese	54	male	HBV	Surgery	NA	HCC	II	NA	NA	NA	NA	NA	NA	NA	622.7	NA	NA	NA	NA	NA	NA
+CLC12	Chinese	74	male	HBV	Surgery	NA	HCC	II-III	NA	NA	NA	NA	NA	NA	NA	> 1210	NA	NA	NA	NA	NA	NA
+CLC13	Chinese	64	female	HBV	Surgery	right	HCC	III	G2S1	negative	+	+	+	+	NA	>3000	1.2	27.4	37.1	30	45	13
+CLC14	Chinese	33	male	HBV	Surgery	right	HCC	III	G2S3	positive	+	+	+	+	NA	>1210	1	9.6	42.1	29	42	11.4
+CLC15	Chinese	41	male	HBV	Surgery	left	HCC	III-IV	NA	negative	-	+	+	+/-	NA	623.4	4.2	49.5	46.6	49	38	12.9
+CLC16	Chinese	53	male	HBV	Surgery	right	HCC	III	G3S3	negative	-	-	+	-	+	237.8	2.3	25.1	44.8	17	26	12.3
+CLC17	Chinese	53	male	HBV	Surgery	NA	HCC	II-III	NA	NA	NA	NA	NA	NA	NA	86.8	NA	NA	NA	NA	NA	NA
+CLC18	Chinese	52	male	HBV	Surgery	NA	HCC	II-III	NA	positive	NA	NA	NA	NA	NA	346.8	NA	NA	NA	NA	NA	NA
+CLC19	Chinese	42	male	HBV	Surgery	right	HCC	III	G2S1	positive	+++	+	+	+	+	548.9	5.4	29.9	46.2	45	25	12.3
+CLC2	Chinese	63	male	HCV	Surgery	right	HCC	III	G2S2	negative	+	-	+	NA	NA	1210	2	14.3	38.8	62	54	6.5
+CLC20	Chinese	42	male	HBV	Surgery	right	HCC	III	G2S1	positive	+++	+	+	+	+	548.9	5.4	29.9	46.2	45	25	12.3
+CLC21	Chinese	51	male	HBV	Surgery	right	HCC	III	G2S3	positive	+	+	+	+	+	1039	2.4	14.2	44.2	19	25	14.1
+CLC22	Chinese	59	male	HBV	Surgery	right	HCC	III	G1S1	positive	++	+	+	+	+	NA	NA	NA	39.5	25	26	15.9
+CLC23	Chinese	50	male	HBV	Surgery	right	HCC	II	NA	negative	++	+	+	+	+	4.09	5.14	22.89	NA	60	61	25.9
+CLC24	Chinese	57	male	HBV	Surgery	left	HCC	II	NA	negative	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+CLC25	Chinese	48	male	HBV	Surgery	right	HCC	III	G2S2	NA	+/-	-	-	-	-	592.8	2.3	30.2	45.6	20	18	8.5
+CLC26	Chinese	52	male	HBV	Surgery	right	HCC	II	NA	positive	+	+	+	-	+	>1210	1.8	17.3	44	20	27	20.1
+CLC27	Chinese	44	male	HBV	Surgery	right	HCC	III	G1S2	positive	+	+	+	-	+	6.5	NA	25.6	44.2	26	19	NA
+CLC28	Chinese	59	female	HBV	Surgery	right	HCC	III	G3S2	negative	+	+	+	-	+	11	NA	27.7	34.1	48	50	10.2
+CLC29	Chinese	38	male	HBV	Surgery	right	HCC	III	G2S2	negative	+	+	+	-	+	24.2	2.2	10.8	50.4	32	27	11.8
+CLC3	Chinese	77	male	NBNC	Surgery	right	HCC	III	NA	negative	+	-	+	-	NA	721.7	11.3	12.6	36.6	10	18	7.5
+CLC30	Chinese	60	male	HBV	Surgery	NA	HCC	II-III	NA	NA	NA	NA	NA	NA	NA	211	NA	NA	NA	NA	NA	NA
+CLC31	Chinese	51	male	HBV	Surgery	left	HCC	III	G2S1	negative	+	+	+	+	+	21.3	4.1	8.2	46.9	16	20	14.8
+CLC32	Chinese	54	male	HBV	Surgery	NA	HCC	II	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA
+CLC33	Chinese	52	male	HBV	Surgery	left	HCC	III	G2S3	positive	++	+	+	+	+	225.6	1.1	8.7	45.2	14	16	15.5
+CLC34	Chinese	67	male	NBNC	Surgery	right	HCC	II-III	NA	positive	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	23.5
+CLC35	Chinese	32	male	HBV	Surgery	right	HCC	II	G2S3	positive	+	NA	+	+	NA	16.5	1.9	8.9	43	29	27	8.3
+CLC36	Chinese	70	male	HBV	Surgery	right	HCC	II-III	G2S4	positive	+	NA	+	+	NA	835.1	3.9	20.8	44	60	54	12.1
+CLC37	Chinese	48	male	HBV	Surgery	left	HCC	II-III	G2S2	positive	-	NA	+	+	NA	504.2	1.3	37.2	50	33	21	12.8
+CLC38	Chinese	61	female	HBV	Surgery	right	HCC	II	G2S4	positive	-	NA	+	+	NA	60500	3.3	62.6	44	46	70	21.4
+CLC39	Chinese	49	male	HBV	Surgery	left	HCC	III	NA	positive	+	NA	NA	NA	NA	631.1	1.8	6.6	46	40	30	16.4
+CLC4	Chinese	41	male	HBV	Surgery	right	HCC	III	G1S2	negative	+	+	+	+	NA	>1210	2.4	44	41.88	30.5	35.22	18.06
+CLC40	Chinese	48	male	HBV	Surgery	right	HCC	II-III	G2S2	negative	+	NA	+	+	NA	330	4.8	6.2	40	21	21	11.7
+CLC41	Chinese	55	male	HBV	Surgery	right	HCC	III	NA	negative	+	+	+	+	+	4.34	NA	NA	NA	58	37	14.9
+CLC42	Chinese	59	male	HBV	Surgery	NA	HCC	III	G3S2	negative	+	+	+	-	+	7.7	1.8	37	43.6	30	32	18.8
+CLC43	Chinese	48	male	HBV	Surgery	left	HCC	III	G2S2	negative	+	+	+	+	+	2.4	3.9	6.6	51.32	NA	15	6.5
+CLC44	Chinese	67	male	HBV	Surgery	left	HCC	III	G2S2	negative	+	+	+	+	+	NA	NA	NA	39.5	NA	NA	16.7
+CLC45	Chinese	54	male	HBV	Surgery	right	HCC	III	G2S2	negative	+	+	+	+	NA	28.2	0.7	21.9	40	34	33	17.8
+CLC46	Chinese	58	male	HBV	Surgery	right	HCC	III	G2S4	negative	+	+	+	-	+	9.4	5	<0.6	43.8	14	20	12
+CLC47	Chinese	55	male	HBV	Surgery	middle	HCC	III	G2S3	negative	+	-	+	+	+	3	3.3	17.3	40	20	16	9.6
+CLC48	Chinese	47	male	HBV	Surgery	right	HCC	III	G2S2	positive	+	+	+	+	NA	14.4	2.7	10.3	44.7	45	27	8.6
+CLC49	Chinese	41	male	HBV	Surgery	left	HCC	III	G2S2	positive	+	+	+	+	NA	>1210	2.2	17.6	25.3	NA	NA	12.3
+CLC5	Chinese	43	female	HBV	Surgery	right	HCC	III	G1S2	negative	+++	++	+	-	+	>1000	1.88	12.32	50.2	44	NA	19.9
+CLC50	Chinese	55	male	HBV	Surgery	right	HCC	III	NA	positive	+	+	+	+	NA	>1000	9.4	16.9	59.87	106	107	24
+CLC6	Chinese	55	male	HBV	Surgery	right	HCC	III	G1S3	negative	+	+	+	+	+	2.5	NA	NA	39.6	29	27	8.6
+CLC7	Chinese	60	male	HBV	Surgery	right	HCC	III	G2S2	negative	+	+	+	+	+	18.8	1.2	12	43.1	26	NA	11.1
+CLC8	Chinese	61	male	HBV	Surgery	right	HCC	NA	NA	NA	-	+	-	-	-	3	1.9	68.1	42.9	48	36	13.3
+CLC9	Chinese	54	male	HBV	Surgery	left	HCC	III	NA	negative	++	+	+	+	+	>1210	1.7	56.9	47	48	41	15.9
+Hep3B	Black 	8	male	HBV			HCC															
+HepG2	Caucasian 	15	male	NBNC			HB															
+HLE	Japanese	68	male	NBNC			HCC															
+HLF	Japanese	68	male	NBNC			HCC															
+Huh1	Japanese	53	male	HBV			HCC															
+Huh6	Japanese	1	male	NBNC			HB															
+Huh7	Japanese	57	male	NBNC			HCC															
+JHH1	Japanese	50	male	HCV			HCC															
+JHH2	Japanese	56	male	NBNC			HCC															
+JHH4	Japanese	51	male	HCV			HCC															
+JHH5	Japanese	50	male	NBNC			HCC															
+JHH6	Japanese	57	female	HCV			HCC															
+JHH7	Japanese	53	male	HBV			HCC															
+Li7	Japanese	45	male	NBNC			HCC															
+Mahlavu	Black 		female	NBNC			HCC															
+MHCC97H	Chinese	39	male	HBV			HCC															
+PLCPRF5	Black 	24	male	HBV			HCC															
+PLC8024	Black 	24	male	HBV			HCC															
+SNU182	Korean	24	male	HBV			HCC															
+SNU354	Korean	52	male	HBV			HCC															
+SNU368	Korean	54	male	HBV			HCC															
+SNU387	Korean	41	female	HBV			HCC															
+SNU398	Korean	42	male	HBV			HCC															
+SNU423	Korean	40	male	HBV			HCC															
+SNU449	Korean	52	male	HBV			HCC															
+SNU475	Korean	43	male	HBV			HCC															
+SNU739	Korean	52	male	HBV			HCC															
+SNU761	Korean	49	male	HBV			HCC															
+SNU878	Korean	54	female	HBV			HCC															
+SNU886	Korean	57	male	HBV			HCC															
+Tong	Italian	59	male	HBV			HCC															

@@ -1,0 +1,9 @@
+TY  - STD
+AU  - Corporation, Microsoft
+AU  - Weston, Steve
+PY  - 2017//
+TI  - doParallel: Foreach Parallel Adaptor for the "parallel" Package
+UR  - https://CRAN.R-project.org/package=doParallel
+N1  - R package version 1.0.11
+ID  - Corporation2017
+ER  - 

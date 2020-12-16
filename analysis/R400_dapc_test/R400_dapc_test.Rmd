@@ -1,0 +1,368 @@
+---
+title: "R400_dapc_test"
+author: "fk506cni"
+date: "2020/12/14"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R400_dapc_test
+
+
+
+## functions
+```{r}
+outputdir <- "./figs/"
+
+ggsave2 <- function(plot, wid=9, hei=9){
+  plot_name <- deparse(substitute(plot))
+  file_name <- paste(outputdir,plot_name, ".png", sep = "",collapse = "")
+  ggsave(filename = file_name,plot = plot,device = "png",width = wid, height = hei,dpi = 300,units = "cm")
+}
+
+ggsave2_pdf <- function(plot, wid=9, hei=9){
+  plot_name <- deparse(substitute(plot))
+  file_name <- paste(outputdir,plot_name, ".pdf", sep = "",collapse = "")
+  ggsave(filename = file_name,plot = plot,device = "pdf",width = wid, height = hei,dpi = 300,units = "cm")
+}
+
+
+
+ggsave2_f <- function(plot,path, wid=9, hei=9){
+  plot_name <- deparse(substitute(plot))
+  file_name <- path
+    # paste(outputdir, plot_name, ".tif", sep = "",collapse = "")
+  ggsave(filename = file_name,plot = plot,device = "tiff",width = wid, height = hei,dpi = 300,units = "cm")
+}
+
+ggsave3 <- function(plot, path, wid=8.2, hei=8.2){
+  #plot_name <- deparse(substitute(plot))
+  plot_name <- path
+  file_name <- path
+  # file_name <- paste(plot_name, ".png", sep = "",collapse = "")
+  ggsave(filename = file_name,plot = plot,device = "png",width = wid, height = hei,dpi = 600,units = "cm")
+}
+
+df_all_chr <- function(df){
+  for (i in c(1, ncol(df))){
+    df[[i]] <- as.character(df[[i]])
+  }
+  return(df)
+}
+
+theme_ggh <- function(font.size=10,legend.position = "none", fam = "Arial") {
+  theme(axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.title = element_blank(),
+        axis.line = element_blank(),
+        axis.ticks = element_blank(),
+        plot.title = element_blank(),
+        panel.grid = element_blank(),
+        panel.border = element_blank(),
+        panel.spacing = element_blank(),
+        panel.background = element_blank(),
+        plot.background = element_blank(),
+        plot.margin = unit(c(0,0,0,0),"cm"),
+        text = element_text(family = fam ,size=font.size,lineheight = 0.7)
+        # ,
+        # legend.position = "none")
+  )
+}
+
+inch2cm <- function(x){
+  return(x/0.39370)
+}
+cm2inch <- function(x){
+  return(0.39370*x)
+}
+
+p2cm <- function(x){
+  return(as.integer(0.008466666666666667 * x))
+}
+
+cm2p <- function(x){
+  return(as.integer(118.11023622047244 *x))
+}
+
+ggsave2_pptx <- function(plot, wid=9, hei=9){
+  
+  library(officer)
+  library(rvg)
+  
+  plot_name <- deparse(substitute(plot))
+  file_name <- paste(outputdir,plot_name, ".pptx", sep = "",collapse = "")
+  plot_ed <- rvg::dml(ggobj = plot,width = wid, height = hei)
+  
+  doc <- read_pptx() %>%
+    add_slide('Title and Content', 'Office Theme') %>%
+    ph_with(value = "", location = ph_location_type(type = "title")) %>%
+    ph_with(value = plot_ed, location = ph_location(type = "body",width = cm2inch(wid), height = cm2inch(hei),left = 2, top = 2))
+  doc %>%
+    print(target = file_name)
+}
+
+
+ggsave3_pptx <- function(plot, file_name, wid=9, hei=9){
+  
+  library(officer)
+  library(rvg)
+  
+  # plot_name <- deparse(substitute(plot))
+  # file_name <- paste("../figs_output/",plot_name, ".pptx", sep = "",collapse = "")
+  # file_name <- paste(file_name, ".pptx", sep = "",collapse = "")
+  plot_ed <- rvg::dml(ggobj = plot,width = wid, height = hei)
+  
+  doc <- read_pptx() %>%
+    add_slide('Title and Content', 'Office Theme') %>%
+    ph_with(value = "", location = ph_location_type(type = "title")) %>%
+    ph_with(value = plot_ed, location = ph_location(type = "body",width = cm2inch(wid), height = cm2inch(hei),left = 2, top = 2))
+  doc %>%
+    print(target = file_name)
+}
+
+
+
+#paste and print
+pp <- function(..., sep= "", rtn = FALSE){
+  s <- paste(..., sep = sep)
+  if(rtn){
+    return(s)
+  }else{
+    cat(s)
+  }
+}
+
+# -の表現ブレ問題
+coerceNeg <- function(v){
+  v <- v %>%
+    str_remove_all(., "\\(") %>%
+    str_remove_all(., "\\)") %>%
+    str_replace(., "－", "-")
+  v2 <- case_when(
+    v == "+" ~ "pos",
+    v == "-" ~ "neg",
+    v == "ー"~ "neg",
+    v == "‑" ~ "neg",
+    v == "‐" ~ "neg",
+    v == "–" ~ "neg",
+    v == "—" ~ "neg",
+    v == "―" ~ "neg",
+    v == "ｰ" ~ "neg",
+    v == "−" ~ "neg",
+    v == "－" ~ "neg",
+    T ~ NA_character_)
+  return(v2)
+}
+
+
+showFigMkdwn <- function(path, wid =6, hei = 9){
+  wid <- as.character(cm2p(wid))
+  # wid <- as.character(pcnt)
+  # hei <- cm2p(hei)
+  # pp("![](",path, " =",wid,"x)")
+  # pp("<img src=\"", filepath())
+  # pp("<img src=", path, " width=\"", wid, "\"/>")
+  pp("<img src=", path, " width=", wid, "/>")
+  # pp("<img src=", path, " width=\"", pcnt, "%\"/>")
+  # <img src="drawing.jpg" alt="drawing" width="200"/>
+}
+showFigMkdwn("path2hell")
+
+
+
+get_Coefs <- function(m){
+  m <-  summary(m)$coefficients %>%
+  as.data.frame() %>%
+  mutate(val = rownames(.),
+         or = exp(`Estimate`),
+           or_low =exp(`Estimate` -1.96*`Std. Error`),
+           or_high = exp(`Estimate` +1.96*`Std. Error`)) %>%
+  mutate(or_str = or %>%
+           round(., digits = 2) %>%
+           as.character(),
+         or_low_str = or_low %>%
+           round(., digits = 2) %>%
+           as.character(),
+         or_high_str = or_high %>%
+           round(., digits = 2) %>%
+           as.character()) %>%
+  mutate(or_ci = str_c(or_str,
+                       "(",
+                       or_low_str,
+                       "-",
+                       or_high_str,
+                       ")")) %>%
+  mutate(p_val_str = case_when(
+    `Pr(>|z|)` < 0.01 ~ "<0.01",
+    `Pr(>|z|)` < 0.1 ~ as.character(round(`Pr(>|z|)`, digits = 3)),
+    T ~as.character(round(`Pr(>|z|)`, digits = 2))
+  ))  %>%
+  dplyr::select(val,
+                or_ci,
+                p_val_str,
+                everything())
+  return(m)
+}
+```
+
+
+
+```{r}
+# install.packages("adegenet")
+library("adegenet")
+require(affy)
+require(tidyverse)
+require(data.table)
+```
+
+```{r}
+
+clstA <- c("JHH-7", "HuH-6", "C3A", "Hep G2", "huH-1", "JHH-5","Hep 3B2.1-7","HuH-7", "Alexander cells", "PLC_PRF_5")
+
+clstB <- c("SNU-182", "SNU-449", "JHH-2", "Li-7", "SNU-761","SNU-886", "JHH-4","HLE", "HLF", "SNU-475", "SNU-387", "SNU-423","SNU-878")
+
+clstC <- c("JHH-1", "SNU-398", "JHH-6", "SK-HEP-1", "NCI-H684")
+```
+
+```{r}
+# af.batch01 <- ReadAffy()
+# mas5_dat <- mas5(af.batch01)
+# mas5_log2 <- log2(exprs(mas5_dat))
+```
+
+```{r}
+f_ga2 <- "../87_2garray_re_mod/2Garray.annot_2.txt"
+df_ga2_org <- fread(f_ga2)
+df_ga2 <- df_ga2_org %>%
+  dplyr::select(Row.names, gene_cluster,Gene.Symbol, q.value) %>%
+  mutate(gene_cluster = ifelse(q.value < 0.0001, gene_cluster, "")) %>%
+  mutate(gene_tag = 
+           case_when(gene_cluster != "" ~ str_c(gene_cluster,Gene.Symbol, Row.names, sep = ":"),
+                     gene_cluster == "" ~ str_c(Gene.Symbol, Row.names, sep = ":")) ) %>%
+  dplyr::rename(probeset_id = Row.names)
+
+
+
+```
+
+
+```{r}
+# saveRDS(object = mas5_log2, "./mas5_log2.rds")
+
+mt <- readRDS(file = "./mas5_log2.rds")
+
+MASS::truehist(mt)
+MASS::truehist(apply(mt, 1, mad))
+MASS::truehist(apply(mt, 1, median))
+mt_sub <- mt %>%
+  as.data.frame() %>%
+  .[, str_detect(colnames(.), "^[AB]_")] %>%
+  .[, !str_detect(colnames(.), "^B_SNU878")] %>%
+  .[apply(., MARGIN = 1, median) > log2(100),] %>%
+  as.data.frame() %>%
+  mutate(probeset_id = rownames(.)) %>%
+  dplyr::left_join(df_ga2, on="probeset_id") %>%
+  dplyr::select(-one_of(c("gene_cluster","Gene.Symbol", "q.value", "probeset_id"))) %>%
+  as.data.frame() %>%
+  `rownames<-`(.[["gene_tag"]]) %>%
+  .[,colnames(.) != "gene_tag"] %>%
+  t()
+MASS::truehist(mt_sub)
+mt_sub[, 1:10] 
+
+# 
+#   dplyr::filter(apply(., MARGIN = 1, mad) > 1)
+```
+
+
+```{r}
+require(adegenet)
+poplab <- rownames(mt_sub) %>%
+  str_extract("^[ABC]")
+poplab
+# tiff(filename = "./cluster_and_BIC.tif", width = 1200, height = 900, units = "px", res = 300)
+# grp <- find.clusters(mt_sub, max.n.clust = 20, n.pca = 18)
+# dev.off()
+grp <- find.clusters(mt_sub, max.n.clust = 20, n.pca = 18, n.clust = 2)
+
+# grp$grp
+
+df_clst <- data.frame(
+  cluster_by_dend = poplab,
+  cluster_by_dapc = grp$grp
+)
+
+df_clst %>%
+  table()
+# nPop(grp)
+# adegenet::pop()
+# pop(grp) <- poplab
+dapc1 <- dapc(mt_sub, grp$grp, var.contrib = TRUE, scale = FALSE, n.pca = 25, var.loadings=T,n.da=2)
+
+# dapc1
+scatter(dapc1)
+# scatter(dapc1,posi.da="bottomright", bg="white", pch=17:22)
+dapc1
+# plot.new()
+set.seed(114514)
+
+thred <- 0.0025
+df_contr <- dapc1$var.contr %>%
+  as.data.frame(row.names = rownames(.)) %>%
+  mutate(rn = rownames(.),
+         ind = 1:nrow(.)) %>%
+  .[sample(1:nrow(.),size = nrow(.)),] %>%
+  mutate(new_ind = 1:nrow(.)) %>%
+  `row.names<-`(.[["rn"]]) %>%
+  mutate(label_y = ifelse(LD1 > thred, rn, "")) %>%
+  mutate(gclst = str_extract(rn, "^[AB]:")) %>%
+  mutate(gclr = case_when(
+    gclst == "A:" ~ "A",
+    gclst == "B:" ~ "B",
+    T ~"Other"))
+  # mutate(rn = row.names(.)) %>%
+  # .[sample(1:nrow(.),size = nrow(.)),] %>%
+  # `rownames<-`(.[["rn"]]) %>%
+  # .[,1] #%>%
+# df_contr$.
+  # as.matrix()
+tiff(filename = "./loading1.tif",width = 1800, height = 1500, units = "px", res = 300)
+contrib <- loadingplot(df_contr,axis = 1, thres = thred)
+dev.off()
+
+
+
+require(ggpubr)
+require(ggrepel)
+p_load <- ggplot()+theme_pubr()+
+  geom_hline(yintercept = thred, color ="gray")+
+  geom_segment(data=df_contr,
+           aes(x=new_ind, y=0, xend=new_ind, yend=LD1, color=gclr))+
+  geom_label_repel(data=df_contr,
+           aes(x=new_ind, y=LD1, label=label_y, color=gclr))+
+  coord_cartesian(expand = F) +
+  scale_color_manual(values = c("red", "blue", "black"))+
+  xlab("Variables")+ylab("Loadings")+ggtitle("Loading Plot")+
+  labs(color ="GeneCluster")
+  
+
+p_load
+
+ggsave2_f(plot = p_load, path = "./R400_loading_plot.tif", wid=25, hei=18)
+
+
+
+```
+
+
+```{r}
+
+# tools:rstudio::RStudio.Version()
+sessionInfo()
+```
+

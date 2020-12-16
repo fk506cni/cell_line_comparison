@@ -1,0 +1,187 @@
+---
+title: "R385_cellline_pca"
+author: "fk506cni"
+date: "2020/12/10"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=T}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r}
+ggsave2 <- function(plot, wid=9, hei=9){
+  plot_name <- deparse(substitute(plot))
+  file_name <- paste("./",plot_name, ".png", sep = "",collapse = "")
+  ggsave(filename = file_name,plot = plot,device = "png",width = wid, height = hei,dpi = 300,units = "cm")
+}
+
+
+ggsave2_pdf <- function(plot, wid=9, hei=9){
+  plot_name <- deparse(substitute(plot))
+  file_name <- paste(outputdir,plot_name, ".pdf", sep = "",collapse = "")
+  ggsave(filename = file_name,plot = plot,device = "pdf",width = wid, height = hei,dpi = 300,units = "cm")
+}
+
+
+
+ggsave2_f <- function(plot,path, wid=9, hei=9){
+  plot_name <- deparse(substitute(plot))
+  file_name <- path
+    # paste(outputdir, plot_name, ".tif", sep = "",collapse = "")
+  ggsave(filename = file_name,plot = plot,device = "tiff",width = wid, height = hei,dpi = 300,units = "cm")
+}
+
+ggsave3 <- function(plot, path, wid=8.2, hei=8.2){
+  #plot_name <- deparse(substitute(plot))
+  plot_name <- path
+  file_name <- paste(plot_name, ".png", sep = "",collapse = "")
+  ggsave(filename = file_name,plot = plot,device = "png",width = wid, height = hei,dpi = 600,units = "cm")
+}
+
+dup_var <- function(vec){
+  is_dup <- vec[duplicated(vec)]
+  return(vec[vec %in% is_dup])
+}
+
+dup_var_bol <- function(vec){
+  is_dup <- vec[duplicated(vec)] %>%
+    unique()
+  return(vec %in% is_dup)
+}
+
+
+
+viewDF <- function(df){
+  df_name <- deparse(substitute(df))
+  print(df_name)
+  df %>%
+    DT::datatable(filter = "top", caption = df_name)
+}
+
+saveDF <- function(df){
+  df_name <- deparse(substitute(df))
+  print(df_name)
+  file_name <- paste(df_name, ".xlsx", sep = "",collapse = "")
+  print(file_name)
+  df %>%
+    openxlsx::write.xlsx(x = .,
+                         file = file_name)
+}
+```
+
+
+
+## cell line pca
+```{r}
+require(tidyverse)
+require(data.table)
+```
+
+
+
+```{r}
+f <- "../87_2garray_re_mod/2Garray.annot_2.txt"
+celdir <- "../87_2garray_re_mod/"
+```
+
+```{r}
+df_org <- fread(f)
+df <- df_org %>%
+  dplyr::select(one_of(c("Row.names")), starts_with("A_"),starts_with("B_")) %>%
+  dplyr::select(-contains("_avg")) %>%
+  as.data.frame() %>%
+  `rownames<-`(.[["Row.names"]]) %>%
+  .[,colnames(.) != "Row.names"]
+# %>%
+#   .[,str_detect(colnames(.),"^A_|^B_")]
+df_t <- t(df) %>%
+  as.data.frame()
+
+```
+
+```{r}
+# install.packages("rlang")
+# devtools::install_github("vqv/ggbiplot")
+require(ggbiplot)
+require(ggpubr)
+labs_p <- df_t %>%
+  row.names() %>%
+  str_remove("^[AB]_")
+group_p <- df_t %>%
+  row.names() %>%
+  str_extract("^[AB]")
+p_df <- prcomp(x=df_t, scale=T)
+
+
+
+```
+
+
+```{r}
+
+deg <- df_org %>%
+  dplyr::filter(q.value < 0.0001) %>%
+  dplyr::select(c("Row.names", "gene_cluster"))
+
+
+e_data <- p_df$rotation %>%
+  as.data.frame() %>%
+  .[rownames(.) %in% deg$Row.names,colnames(.) %in% c("PC1", "PC2")] %>%
+  mutate(Row.names = rownames(.))
+
+tms <- 4000
+
+ant_seg <- merge(deg, e_data, by="Row.names") %>%
+  mutate(PC1 = tms * PC1,
+         PC2 = tms * PC2) %>%
+  dplyr::rename(Gene = gene_cluster)
+
+
+
+```
+
+```{r}
+require(ggnewscale)
+require(ggbiplot)
+p <- ggbiplot(pcobj = p_df, obs.scale = 1, var.scale = 1,
+              var.axes = F, labels = labs_p, groups = group_p)+
+  theme(legend.direction = "horizontal", legend.position = "top", aspect.ratio = 1,
+        panel.grid = element_line(colour = "black"),
+        panel.background = element_rect(fill = 'white', colour = 'black'))+
+  labs(color="CellLine")+
+  scale_color_manual(values = c("red", "blue"))+
+  new_scale_color()+
+  geom_segment(data = ant_seg,
+               aes(x=0, y=0, xend=PC1, yend=PC2, color=Gene),
+               arrow = arrow(length = unit(0.3, "cm")))+
+  scale_color_manual(values = c("orange", "green"))
+p
+  
+# geom_segment(aes(x = 0, y = 0, xend = 10, yend=10))
+# +
+
+# +theme_classic()
+# +
+#   theme_light()
+p
+grid::grid.draw(p)
+
+ggsave3(plot = p, path = "./R385_cl_pca_loading", wid = 12, hei = 12)
+ggsave2_f(plot = p, "./R385_cl_pca_loading.tif", wid = 12, hei = 12)
+```
+
+
+```{r}
+adegenet::find.clusters.data.frame(x = df)
+```
+
+```{r}
+rstudioapi::versionInfo()
+sessionInfo()
+```
+

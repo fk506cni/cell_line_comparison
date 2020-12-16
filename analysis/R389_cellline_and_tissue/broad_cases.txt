@@ -1,0 +1,39 @@
+Disease Name	Cohort	Cases	Analyses	Data
+Adrenocortical carcinoma	ACC	92	Browse	Browse
+Bladder urothelial carcinoma	BLCA	412	Browse	Browse
+Breast invasive carcinoma	BRCA	1098	Browse	Browse
+Cervical and endocervical cancers	CESC	307	Browse	Browse
+Cholangiocarcinoma	CHOL	51	Browse	Browse
+Colon adenocarcinoma	COAD	460	Browse	Browse
+Colorectal adenocarcinoma	COADREAD	631	Browse	Browse
+Lymphoid Neoplasm Diffuse Large B-cell Lymphoma	DLBC	58	Browse	Browse
+Esophageal carcinoma	ESCA	185	Browse	Browse
+FFPE Pilot Phase II	FPPP	38	None	Browse
+Glioblastoma multiforme	GBM	613	Browse	Browse
+Glioma	GBMLGG	1129	Browse	Browse
+Head and Neck squamous cell carcinoma	HNSC	528	Browse	Browse
+Kidney Chromophobe	KICH	113	Browse	Browse
+Pan-kidney cohort (KICH+KIRC+KIRP)	KIPAN	973	Browse	Browse
+Kidney renal clear cell carcinoma	KIRC	537	Browse	Browse
+Kidney renal papillary cell carcinoma	KIRP	323	Browse	Browse
+Acute Myeloid Leukemia	LAML	200	Browse	Browse
+Brain Lower Grade Glioma	LGG	516	Browse	Browse
+Liver hepatocellular carcinoma	LIHC	377	Browse	Browse
+Lung adenocarcinoma	LUAD	585	Browse	Browse
+Lung squamous cell carcinoma	LUSC	504	Browse	Browse
+Mesothelioma	MESO	87	Browse	Browse
+Ovarian serous cystadenocarcinoma	OV	602	Browse	Browse
+Pancreatic adenocarcinoma	PAAD	185	Browse	Browse
+Pheochromocytoma and Paraganglioma	PCPG	179	Browse	Browse
+Prostate adenocarcinoma	PRAD	499	Browse	Browse
+Rectum adenocarcinoma	READ	171	Browse	Browse
+Sarcoma	SARC	261	Browse	Browse
+Skin Cutaneous Melanoma	SKCM	470	Browse	Browse
+Stomach adenocarcinoma	STAD	443	Browse	Browse
+Stomach and Esophageal carcinoma	STES	628	Browse	Browse
+Testicular Germ Cell Tumors	TGCT	150	Browse	Browse
+Thyroid carcinoma	THCA	503	Browse	Browse
+Thymoma	THYM	124	Browse	Browse
+Uterine Corpus Endometrial Carcinoma	UCEC	560	Browse	Browse
+Uterine Carcinosarcoma	UCS	57	Browse	Browse
+Uveal Melanoma	UVM	80	Browse	Browse

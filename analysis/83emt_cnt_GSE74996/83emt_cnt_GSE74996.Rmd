@@ -1,0 +1,560 @@
+---
+title: "83emt_cnt_GSE74996"
+author: "fkeita"
+date: "2017/1/6"
+output: html_document
+---
+General setup
+```{r setup}
+knitr::opts_chunk$set(echo = TRUE, cache = TRUE,cache.lazy = FALSE)
+source("http://bioconductor.org/biocLite.R")
+require("affy")
+require("R.utils")
+require("stringr")
+#require("heatmap3") 
+#require("GMD") 
+#install.packages("gplots")
+require("gplots")
+```
+
+```{r}
+g_id <- "GSE74996"
+```
+
+
+EMT pattern should be validated  
+3plans will be tried.
+
+##file_preparation
+```{r untarfiles}
+# untar(tarfile = "./GSE74996_RAW.tar")
+# for (i in list.files(pattern = ".gz")){
+#     gunzip(i)
+# }
+
+#unzip(zipfile = "./HG-U133_Plus_2.na36.annot.csv.zip")
+
+```
+
+##annotations to single ENSG
+```{r read_annotations}
+annot <- read.csv(file = "./HG-U133_Plus_2.na36.annot.csv",header = T,sep = ",",check.names = F,skip = 25)
+annot$emstag <- annot$Ensembl
+hist(str_count(string = annot$emstag,pattern = "///"))
+
+annot_temp <- annot[str_detect(string = annot$emstag,pattern = "///"),]
+while(dim(annot_temp)[1] > 0){
+    annot_temp$emstag <- str_replace(string = annot_temp$emstag,pattern = "^[A-Z]*[0-9]* /// ",replacement = "")
+    annot <- rbind(annot, annot_temp)
+    annot_temp <- annot_temp[str_detect(string = annot_temp$emstag, pattern = "///"),]
+}
+
+annot$emstag <- str_extract(string = annot$emstag, pattern = "^[A-Z]*[0-9]*")
+annot <- annot[str_detect(string = annot$emstag,pattern = "ENSG"),]
+
+#symbol+probeset_id
+annot$rowname <- paste(annot$`Gene Symbol`, annot$`Probe Set ID`, sep = "_")
+
+```
+
+
+```{r readcels}
+af_batch <- ReadAffy()
+mas5data <- mas5(af_batch)
+mas5log <- log2(exprs(mas5data))
+dim(mas5log)
+label <- c("Hep-3B-shLuc-rep1","Hep-3B-shKLHL23-rep1","Hep-3B-shLuc-rep3","Hep-3B-shKLHL23-rep3","Huh7-shLuc-rep1","Huh7-shKLHL23-rep1","Huh7-shLuc-rep3","Huh7-shKLHL23-rep3")
+colnames(mas5log) <- label
+```
+
+
+##plan1
+```{r genelist}
+gene_list <- read.table(file = "./endeavour_results.txt",header = T,sep = "\t",check.names = F)
+gene_list <- gene_list[,c(1:6)]
+gene_list$symbol
+```
+
+
+##plan2
+```{r targetlist}
+target_genes <- c("SNAI1","SNAI2","TWIST1","TWIST2","ZEB1","ZEB2",
+            "FN1","VTN","CDH2","MMP9",
+            "CLDN3","OCLN","CDH1","DSP","CTNNB1")
+```
+
+##plan3
+##read_2gannot
+```{r read2gannot}
+cutoff_q <- 0.0001
+g2 <- read.table(file = "2Garray.annot.txt",header = T,sep = "\t",quote = "",check.names = F,fill = T)
+
+g2$group <- ifelse(g2$avg_sub>0, "red", "blue")
+
+g2 <- g2[g2$q.value <= cutoff_q,]
+g2 <- g2[sort.list(g2$avg_sub),]
+
+rownames(g2) <- g2$Row.names
+```
+
+
+
+##annot_plan1
+```{r annot1}
+annot_emt <- annot[annot$`Gene Symbol`%in% gene_list$symbol,]
+annot_emt <- annot_emt[!duplicated(annot_emt$`Probe Set ID`),]
+d <- mas5log[rownames(mas5log) %in% annot_emt$`Probe Set ID`,]
+
+for (i in c(1:dim(d)[1])){
+    rownames(d)[i] <- annot_emt[annot_emt$`Probe Set ID` == rownames(d)[i],]$rowname
+}
+
+```
+
+##visualize
+```{r v1}
+d <- as.matrix(d)
+mind <- min(d)
+maxd <- max(d)
+pairs.breaks <- c(seq(mind, maxd, length.out=256))
+
+heatmap.2(d,cexRow = 0.5,cexCol = 0.5,trace = "none",dendrogram = "row",Rowv = T, Colv = F,scale = "none",srtRow = 45,srtCol = 45,col =bluered(255),breaks = pairs.breaks,symkey = F)
+```
+
+##annot_plan2
+```{r annot2}
+annot_emt <- annot[annot$`Gene Symbol` %in% target_genes,]
+
+annot_emt <- annot_emt[!duplicated(annot_emt$`Probe Set ID`),]
+d <- mas5log[rownames(mas5log) %in% annot_emt$`Probe Set ID`,]
+
+for (i in c(1:dim(d)[1])){
+    rownames(d)[i] <- annot_emt[annot_emt$`Probe Set ID` == rownames(d)[i],]$rowname
+}
+
+```
+
+##visualize2
+```{r v2}
+d <- as.matrix(d)
+mind <- min(d)
+maxd <- max(d)
+pairs.breaks <- c(seq(mind, maxd, length.out=256))
+
+heatmap.2(d,cexRow = 0.5,cexCol = 0.5,trace = "none",dendrogram = "row",Rowv = T,Colv = F,scale = "none",srtRow = 45,srtCol = 45,col =bluered(255),breaks = pairs.breaks,symkey = F)
+```
+
+##annot_plan3
+```{r}
+# annot_emt <- annot[annot$`Probe Set ID` %in% g2$Row.names,]
+# annot_emt <- annot_emt[!duplicated(annot_emt$`Probe Set ID`),]
+# d <- mas5log[rownames(mas5log) %in% annot_emt$`Probe Set ID`,]
+# 
+# for (i in c(1:dim(d)[1])){
+#     rownames(d)[i] <- annot_emt[annot_emt$`Probe Set ID` == rownames(d)[i],]$rowname
+# }
+```
+
+
+```{r}
+ref_sort <- function(sort_vector, ref_vector){
+  result_vector <- c()
+  for(i in c(1:length(ref_vector))){
+    index_i <- which(sort_vector==ref_vector[i])
+    result_vector <- c(result_vector, index_i)
+  }
+  return(result_vector)
+}
+```
+
+
+##annot_plan3
+```{r}
+annot_emt <- annot[annot$`Probe Set ID` %in% g2$Row.names,]
+annot_emt <- annot_emt[!duplicated(annot_emt$`Probe Set ID`),]
+
+annot_emt_mg <- merge(annot_emt, g2, by.x="Probe Set ID", by.y = "Row.names")
+annot_emt_mg <- annot_emt_mg[sort.list(annot_emt_mg$avg_sub, decreasing = T),]
+
+
+d <- mas5log[rownames(mas5log) %in% annot_emt_mg$`Probe Set ID`,]
+
+
+d <- d[ref_sort(sort_vector = row.names(d), ref_vector = annot_emt_mg$`Probe Set ID`),]
+
+
+d_col <- c(rep(NA, dim(d)[1]))
+
+for (i in c(1:dim(d)[1])){
+    d_col[i] <-  g2[g2$Row.names == rownames(d)[i],]$group
+}
+
+d_col
+
+for (i in c(1:dim(d)[1])){
+    rownames(d)[i] <- annot_emt[annot_emt$`Probe Set ID` == rownames(d)[i],]$rowname
+}
+
+
+```
+
+##visualize3
+```{r}
+d <- as.matrix(d)
+mind <- min(d)
+maxd <- max(d)
+pairs.breaks <- c(seq(mind, maxd, length.out=256))
+
+heatmap.2(d,cexRow = 0.5,cexCol = 1,trace = "none",dendrogram ="both" ,Rowv = T, Colv = T,scale = "none",srtRow = 45,srtCol = 45,col =bluered(255),breaks = pairs.breaks,symkey = F, RowSideColors = d_col,main = "GSE10393")
+```
+
+```{r}
+lmat <- rbind(c(5,6,6),
+              c(0,0,2),
+              c(4,1,3))
+lhei <- c(1.5,0.2,4)
+lwid <- c(0.2,0.2,4)
+
+#colslider <- c(rep("pink",2),rep("cyan", 2))
+
+d2 <- d[,c(1,3,2,4,5,7,6,7)]
+colslider <- c(rep("pink",2),rep("red",2),rep("lavender",2),rep("purple",2))
+
+#tiff(filename = "heat1.tif",width = 6,height = 6, units = "cm", res = 300)
+#heatmap.2(x = h,cexCol = 1,trace = "none",dendrogram ="none" ,Rowv = F, Colv = F,scale = "none",srtRow = 45,srtCol = 45,col =bluered(255),symkey = F,ColSideColors = colslider, RowSideColors = rowslider,labRow = "",lmat = lmat,lhei = lhei, lwid = lwid, margins = c(7,1))
+
+heatmap.2(d2,cexRow = 0.5,cexCol = 1,trace = "none",dendrogram = "none",Rowv = F, Colv = F,scale = "none",srtRow = 45,srtCol = 45,col =bluered(255),breaks = pairs.breaks,symkey = F, RowSideColors = d_col,ColSideColors = colslider,labRow = "",lmat = lmat,lhei = lhei, lwid = lwid, margins = c(7,1))
+
+dev.off()
+
+heatmap.2(d2,cexRow = 0.5,cexCol = 1,trace = "none",dendrogram = "row",Rowv = T, Colv = F,scale = "none",srtRow = 45,srtCol = 45,col =bluered(255),breaks = pairs.breaks,symkey = F, RowSideColors = d_col,ColSideColors = colslider,labRow = "",lmat = lmat,lhei = lhei, lwid = lwid, margins = c(7,1))
+```
+
+##ggheat
+```{r}
+
+df <- d2
+
+ggheat <- function(df,
+clst_method="average",
+dist_method="spearman",
+colslider, rowslider,
+ColV=T, RowV=T,
+colnames=T, rownames=T,
+colangle=45, rowangle=45,
+colours=c("blue", "white", "red"),
+key.axis.fontsize=12,
+main="title",
+add_p=NULL,
+lmat=NULL,
+lhei=NULL,lwid=NULL,
+font.size=14,
+col_name_label_mod = NULL){
+    require(ggplot2)
+    require(reshape2)##for melting
+    require(grid)
+    require(gridExtra)
+    require(ggdendro)
+    require(scales)
+    ##common theme function
+    theme_ggh <- function(font.size=10,legend.position = "none") {
+        theme(axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.title = element_blank(),
+        axis.line = element_blank(),
+        axis.ticks = element_blank(),
+        plot.title = element_blank(),
+        panel.grid = element_blank(),
+        panel.border = element_blank(),
+        panel.spacing = element_blank(),
+        panel.background = element_blank(),
+        plot.background = element_blank(),
+        plot.margin = unit(c(0,0,0,0),"cm"),
+        text = element_text(family = "Arial",size=font.size,lineheight = 0.7),
+        legend.position = "none"
+        )
+    }
+
+    ##blank grid for plotting blank
+    blank_grid <- grid.rect(gp=gpar(col="white"))
+
+    df <- as.data.frame(df)
+
+    ##clustering if needed
+    cluster_data <- list()
+    if(ColV==T){
+        dist_x <- as.dist(1-cor(as.matrix(df),method = dist_method))
+        clst_x <- hclust(dist_x,method = clst_method)
+        df <- df[,clst_x$order]
+        colslider <- colslider[clst_x$order]
+        if(!is.null(col_name_label_mod)){
+            col_name_label_mod <- col_name_label_mod[clst_x$order]
+        }
+        cluster_data <- append(cluster_data, list(clst_x))
+    }
+
+    if(RowV==T){
+        dist_y <- as.dist(1-cor(as.matrix(t(df)),method = dist_method))
+        clst_y <- hclust(dist_y,method = clst_method)
+        df <- df[clst_y$order,]
+        rowslider <- rowslider[clst_y$order]
+        cluster_data <- append(cluster_data, list(clst_y))
+    }
+
+    ##matrix prepareation
+    colname <- colnames(df)
+    colname <- data.frame(text=colname, x=c(1:length(colname)),colslider=colslider)
+    colnames(df) <- c(1:ncol(df))
+    if(!is.null(col_name_label_mod)){
+        colname$original_label <- colname$text
+        colname$text <- col_name_label_mod
+    }
+    
+
+    rowname <- rownames(df)
+    rowname <- data.frame(text=rowname, y=c(1:length(rowname)),rowslider=rowslider)
+    rownames(df) <- c(1:nrow(df))
+
+    tiledata <- melt(as.matrix(df))
+
+    ##heatmap is p1
+    p1 <- ggplot()+
+        geom_tile(data = tiledata, mapping = aes(x=Var2, y = Var1, fill=value))+
+        scale_x_continuous(expand=c(0,0))+
+        scale_y_continuous(expand=c(0,0))+
+        scale_fill_gradient2(low = colours[1],mid = colours[2],high = colours[3],midpoint = (max(tiledata$value)+min(tiledata$value))/2)+
+        guides(fill=F)+
+        theme_ggh()
+    #p1
+
+    ##colslider is cols
+    cols <- ggplot()+
+        geom_tile(data=colname,aes(x=x,y=0,fill=colslider))+
+        scale_fill_identity(guide = "legend")+
+        scale_x_continuous(expand=c(0,0))+
+        scale_y_continuous(expand=c(0,0))+
+        theme_ggh()
+    ##          
+
+    #cols
+
+    ##rowslider is rows
+
+    rows <- ggplot()+
+        geom_tile(data=rowname,aes(x=0,y=y,fill=rowslider))+
+        scale_fill_discrete(name="category")+
+        scale_x_continuous(expand=c(0,0))+
+        scale_y_continuous(expand=c(0,0))+
+        theme(legend.text = element_text(family = "Arial",size=font.size,lineheight = 0.7),
+        legend.title =element_text(family = "Arial",size=font.size+2,lineheight = 0.7))
+
+    rows_grob <- ggplot_gtable(ggplot_build(rows))
+    id.legend <- which(sapply(rows_grob$grobs, function(x) x$name)=="guide-box")
+    rows_legend <- rows_grob$grobs[[id.legend]]
+
+    rows <- ggplot()+
+        geom_tile(data=rowname,aes(x=0,y=y,fill=rowslider))+
+        scale_fill_identity(guide = "legend")+
+        scale_x_continuous(expand=c(0,0))+
+        scale_y_continuous(expand=c(0,0))+
+        theme_ggh()
+    #rows
+
+    ##col dendrogram if needed
+    if(ColV==T){
+        coldend <- as.dendrogram(clst_x)
+        #plot(coldend)
+        coldend <- segment(dendro_data(coldend))
+        cold <- ggplot()+
+            geom_segment(data=coldend,aes(x=x, y=y, xend=xend, yend=yend))+
+            scale_x_continuous(expand=c(0,0),limits = c(0.5,max(coldend$xend)+0.5))+
+            scale_y_continuous(expand=c(0,0))+
+            theme_ggh()
+        #cold
+    }else{
+        cold <- blank_grid
+    }
+
+    ##row dendrogram if needed
+    if(RowV==T){
+        rowdend <- as.dendrogram(clst_y)
+        #plot(rowdend)
+        rowdend <- segment(dendro_data(rowdend))
+        rowd <- ggplot()+
+            geom_segment(data = rowdend,aes(x=x, y=y, xend=xend, yend=yend))+
+            scale_x_continuous(expand=c(0,0),limits = c(0.5,max(rowdend$xend)+0.5))+
+            scale_y_continuous(expand=c(0,0))+
+            theme_ggh()+
+            coord_flip()
+#                    scale_x_continuous(expand=c(0,0),limits = c(0.5,max(rowdend$xend)+0.5))+
+
+        rowd
+    }else{
+        rowd <- blank_grid
+    }
+
+    ##key histgram(density plot)
+    key_hist <- hist(tiledata$value,breaks = 50,plot = F)
+    max_hist <- max(key_hist$density)
+    key_density <- data.frame(range=seq(min(tiledata$value)-1, max(tiledata$value)+1, 0.02))
+    key_density_range <- density(tiledata$value)
+
+    key <-  ggplot()+
+        geom_tile(data = key_density,
+        mapping = aes(x = range, y=max_hist/2*1.2,fill=range,width=0.02, height=max_hist*1.2),
+        show.legend = F)+
+        scale_fill_gradient2(low = colours[1],mid = colours[2],high = colours[3],
+        midpoint = (max(tiledata$value)+min(tiledata$value))/2,
+        limits=c(max(tiledata$value),min(tiledata$value)),
+        oob=squish)+
+        scale_x_continuous(expand=c(0,0))+
+        scale_y_continuous(expand=c(0,0))+
+        geom_histogram(data = tiledata,mapping = aes(x=value,y=..density..),
+        alpha=0.8, binwidth = (max(tiledata$value)-min(tiledata$value))/50)+
+        guides(fill=F,colour=F)+xlab("")+ylab("")+
+        theme_classic()+
+        theme(text = element_text(family = "Arial",size=font.size,lineheight = 0.7),
+        axis.text.x =  element_text(family = "Arial",size=key.axis.fontsize),
+        axis.text.y =  element_text(family = "Arial",size=key.axis.fontsize),
+        plot.margin = unit(c(0,0,-0.02,-0.015),"native"))
+    #key
+
+    ##colnames
+    #additional modification about col label potision.
+    #two TIMP2 probe sets are too closed.
+    sub_timp <- 1
+    timps <- colname[str_detect(colname$text, "^TIMP2"),]
+    colname$x[timps$x[1]] <- colname$x[timps$x[1]] - sub_timp
+    colname$x[timps$x[2]] <- colname$x[timps$x[2]] + sub_timp
+    
+    ##colnames
+    vjust_col <- 0
+    hjust_col <- -0.1
+    if(colnames==T){
+        colname_label <- ggplot()+
+            geom_text(data=colname,mapping = aes(x=x,y=0, label=text,angle=colangle),
+            size=(5/14)*font.size,vjust=vjust_col, hjust= hjust_col)+
+            scale_x_continuous(expand=c(0,0),limits = c(min(colname$x), max(colname$x)+0.5))+
+            scale_y_continuous(expand=c(0,0),limits = c(0,1))+
+            theme_ggh(font.size =font.size)
+        colname_table <- ggplot_gtable(ggplot_build(colname_label))
+        colname_table$layout$clip[colname_table$layout$name=="panel"] <- "off"
+        #class(colname_table)
+        #colname_label
+    }else{
+        colname_label <- blank_grid
+        colname_table <- blank_grid
+    }
+
+    ##rownames
+
+    if(rownames==T){
+        rowname_label <- ggplot()+
+            geom_text(data = rowname,mapping = aes(x=0,y=y, label=text,angle=rowangle),
+            size=font.size,vjust=+1)+
+            scale_x_continuous(expand=c(0,0),limits = c(0,0))+
+            scale_y_continuous(expand=c(0,0),limits = c(min(rowname$y)-0.5, max(rowname$y)+0.5))+
+            theme_ggh(font.size =font.size)
+        rowname_table <- ggplot_gtable(ggplot_build(rowname_label))
+        rowname_table$layout$clip[rowname_table$layout$name=="panel"] <- "off"
+        #rowname_label
+    }else{
+        rowname_label <- blank_grid
+        rowname_table <- blank_grid
+    }
+
+    if(!is.null(add_p)){
+        add <- add_p
+    }else{
+        add <- blank_grid
+    }
+    #add <- b1
+    #add <- rows_legend
+
+    ##layout
+    if(is.null(lmat) | is.null(lwid) | is.null(lhei)){
+        lmat <- rbind(c(2,1,1,8,8,8),
+        c(1,1,9,8,8,8),
+        c(1,1,4,8,8,8),
+        c(1,10,3,5,7,1),
+        c(1,1,6,1,1,1))
+        lwid <- c(0.01, 0.2, 1.3, 0.05,0.2,0.15)
+        lhei <- c(0.12,0.4,0.1,2,0.01)
+    }
+
+
+    g1 <- grid.arrange(blank_grid,#1
+    add,#2
+    p1,#3
+    cols,#4
+    rows,#5
+    cold,#6
+    rowd,#7
+    key,#8
+    colname_table,#9
+    rowname_table,#10
+    layout_matrix=lmat,heights=lhei, widths=lwid,
+    top=textGrob(main, gp=gpar(fontsize=20,fontfamily="Arial")))
+    result_list <- list(plot_data=g1, cluster_data=cluster_data)
+    return(result_list)
+}
+```
+
+```{r}
+font_size <- 14
+lmat <- rbind(c(2,8,8,8,1,6),
+        c(1,8,8,8,1,1),
+        c(1,1,9,1,1,1),
+        c(1,1,4,1,1,1),
+        c(1,10,3,5,7,1)
+        )
+lwid <- c(0.01, 0.05, 1.3, 0.05,0.05,0.01)
+lhei <- c(0.12,0.4,0.7,0.1,1.4)
+
+h <- d2
+
+g <- ggheat(df=h,ColV = F,RowV = F, colslider=colslider, rowslider=d_col,colnames = T, rownames = F,main = g_id,lhei = lhei, lwid = lwid, lmat = lmat,font.size = font_size)
+ggsave(filename = paste(g_id,".tiff",sep = ""),plot = g$plot_data,dpi = 300, width = unit(9, "cm"),height = unit(12,"cm"))
+ggsave(filename = paste(g_id,".tiff",sep = ""),plot = g$plot_data,dpi = 300, width = unit(9, "cm"),height = unit(8,"cm"))
+```
+
+
+##annot_plan3
+```{r annot3}
+# annot_emt <- annot[annot$`Probe Set ID` %in% g2$Row.names,]
+# annot_emt <- annot_emt[!duplicated(annot_emt$`Probe Set ID`),]
+# d <- mas5log[rownames(mas5log) %in% annot_emt$`Probe Set ID`,]
+# 
+# d_col <- c(rep(NA, dim(d)[1]))
+# 
+# for (i in c(1:dim(d)[1])){
+#     d_col[i] <-  g2[g2$Row.names == rownames(d)[i],]$group
+# }
+# 
+# d_col
+# 
+# for (i in c(1:dim(d)[1])){
+#     rownames(d)[i] <- annot_emt[annot_emt$`Probe Set ID` == rownames(d)[i],]$rowname
+# }
+# 
+
+```
+
+##visualize3
+```{r v3}
+# d <- as.matrix(d)
+# mind <- min(d)
+# maxd <- max(d)
+# pairs.breaks <- c(seq(mind, maxd, length.out=256))
+# 
+# heatmap.2(d,cexRow = 0.5,cexCol = 1,trace = "none",dendrogram ="both" ,Rowv = T, Colv = T,scale = "none",srtRow = 45,srtCol = 45,col =bluered(255),breaks = pairs.breaks,symkey = F, RowSideColors = d_col,main = "GSE74996")
+```
+
+
+
+##sessioninfo
+```{r}
+sessionInfo()
+Sys.time()
+Sys.info()
+```
