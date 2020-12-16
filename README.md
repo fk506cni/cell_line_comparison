@@ -18,7 +18,6 @@ Description of each file and the purpose.
     - DEG analysis in liver cancer cell line cluster.
 
 
-
 - 137PCA_renormalize_redo
     - Comparison of expression pattern using Primary Cell Atlas
     - Clustering in liver cancer cell lines
@@ -40,6 +39,18 @@ Description of each file and the purpose.
 
 - R176_clin_clst_expanal_re_mod
     - Analysis clinical sample cluster 3
+
+- 81emt_cntr
+    - expression check of EMT
+    - GSE10393
+
+- 82emt_cntr2
+    - expression check of EMT
+    - GSE28798
+
+- 83emt_cnt_GSE74996
+    - expression check of EMT
+    - GSE74996
 
 - 150compare_FB_mod2
     - Comparison CCLE cell lines by Fibroblast representitive vector
