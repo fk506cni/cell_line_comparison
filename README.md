@@ -82,3 +82,5 @@ Description of each file and the purpose.
 
 
 License: GPLv3 about my codes.
+
+Citation: xxx
