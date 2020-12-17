@@ -4,7 +4,8 @@ There are Rmarkdown files (.rmd) and their output htmls (.html) by Rstudio.
 Starting materials such as "CCLE_Expression.Arrays_2013-03-18.tar.gz" are not deposited here.  
 Please get them from Broad Institute, TCGA, NCBI GEO and so on.  
 
-
+Analysis environment is described by "SessionInfo" function at lastpart of htmls.
+Used packages are listed up at the section.
 
 Description of each file and the purpose.
 
@@ -16,16 +17,24 @@ Description of each file and the purpose.
     - DEG analysis in liver cancer cell line cluster.
 
 - R385_cellline_pca
-    - Principal Component Analysis about liver cancer cell lines
+    - Principal Component Analysis about liver cancer cell lines.
+    - Ploting score plot.
+
+- R400_dapc_test
+    - DAPC analysis about liver cancer cell lines
+    - Searching suitable number of cluster.
+    - Ploting loading plot
 
 - 103_g2array_david _mod
     - Gene ontology enrichment analysis using DAVID
 
 - 145cell_establish_rep
     - Comparison of cell line establishment reports.
+    - Examination of age between patients who cell line established from.
 
 - 126TCGA_Celllinecomparison_mod
-    - Expression pattern analysis using TCGA HCC cohort
+    - Expression pattern analysis using TCGA HCC cohort.
+    - Proportion of expression pattern evaluated.
 
 - 157clin_clust_anals_mod
     - Analysis clinical sample cluster
@@ -67,8 +76,6 @@ Description of each file and the purpose.
 - R390_limore_check
     - Expression analysis about LIMORE RNA-Seq Data
 
-- R400_dapc_test
-    - DAPC analysis about CCLE microarray data
 
 
 
