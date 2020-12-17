@@ -1,5 +1,7 @@
 ## analysis codes and flows in cell line comparison.
 
+We analized expression pattern among liver cancer cell lines.
+
 There are Rmarkdown files (.rmd) and their output htmls (.html) by Rstudio.  
 Starting materials such as "CCLE_Expression.Arrays_2013-03-18.tar.gz" are not deposited here.  
 Please get them from Broad Institute, TCGA, NCBI GEO and so on.  
