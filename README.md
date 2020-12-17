@@ -6,7 +6,7 @@ There are Rmarkdown files (.rmd) and their output htmls (.html) by Rstudio.
 Starting materials such as "CCLE_Expression.Arrays_2013-03-18.tar.gz" are not deposited here.  
 Please get them from Broad Institute, TCGA, NCBI GEO and so on.  
 
-Analysis environment is described by "SessionInfo" function at lastpart of htmls.
+Analysis environment is described by "SessionInfo" function at last part of htmls.
 Used packages are listed up at the section.
 
 Description of each file and the purpose.
