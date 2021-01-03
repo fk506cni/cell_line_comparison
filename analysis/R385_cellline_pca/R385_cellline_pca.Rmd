@@ -145,6 +145,7 @@ ant_seg <- merge(deg, e_data, by="Row.names") %>%
 
 ```
 
+
 ```{r}
 require(ggnewscale)
 require(ggbiplot)
@@ -175,13 +176,84 @@ ggsave3(plot = p, path = "./R385_cl_pca_loading", wid = 12, hei = 12)
 ggsave2_f(plot = p, "./R385_cl_pca_loading.tif", wid = 12, hei = 12)
 ```
 
+```{r}
+x_imp <- summary(p_df)$importance %>%
+  as.data.frame() %>%
+  .[["PC1"]] %>%
+  .[2] %>%
+  round(digits = 3) *100
+x_lab <- str_c(
+  "PC1 (", as.character(x_imp), "% explained.var.)"
+)
+x_lab
+
+
+y_imp <- summary(p_df)$importance %>%
+  as.data.frame() %>%
+  .[["PC2"]] %>%
+  .[2] %>%
+  round(digits = 5) *100.0
+
+# as.character(8.0, length=3)
+# 
+# # ?as.character
+# 
+# format("9.054", digits = 20)
+# 
+# y_imp
+y_imp2 <- y_imp %>%
+  as.character() %>%
+  str_sub(1,3)
+y_lab <-   str_c(
+  "PC2 (", as.character(y_imp2), "% explained.var.)"
+)
+y_lab
+
+
+```
+
 
 ```{r}
-adegenet::find.clusters.data.frame(x = df)
+df_p_ant <- p_df$x %>%
+  as.data.frame() %>%
+  mutate(rn = rownames(.)) %>%
+  mutate(group_p = str_extract(rn, "^[AB]")) %>%
+  mutate(cl = str_remove(rn, "^[AB]_"))
+
+require(ggrepel)
+p_bi <- ggplot()+
+  theme_pubr()+theme(aspect.ratio = 1)+
+  theme(legend.direction = "horizontal", legend.position = "top", aspect.ratio = 1,
+        panel.grid = element_line(colour = "black"),
+        panel.grid.major = element_line(color="gray"),
+        panel.background = element_rect(fill = 'white', colour = 'gray'))+
+  geom_segment(data = ant_seg,
+               aes(x=0, y=0, xend=PC1, yend=PC2, color=Gene),
+               arrow = arrow(length = unit(0.3, "cm")))+
+  scale_color_manual(values = c("orange", "green"))+
+  
+  new_scale_color()+
+  
+  geom_point(data = df_p_ant, 
+             aes(x=PC1, y=PC2, color = group_p))+
+    scale_color_manual(values = c("red", "blue"))+
+labs(color="CellLine")+
+  new_scale_color()+
+  geom_text_repel(data = df_p_ant, 
+             aes(x=PC1, y=PC2, color = group_p, label=cl))+
+    scale_color_manual(values = c("red", "blue"), guide=F)+
+
+  scale_x_continuous(breaks = seq(-150, 150, by=50))+
+  scale_y_continuous(breaks = seq(-150, 150, by=50))+
+labs(color="CellLine")+xlab(x_lab) + ylab(y_lab)
+
+p_bi
+
+ggsave3(plot = p_bi, path = "./R385_cl_pca_loading_withpoint", wid = 12, hei = 12)
+ggsave2_f(plot = p_bi, "./R385_cl_pca_loading_withpoint.tif", wid = 12, hei = 12)
 ```
 
 ```{r}
-rstudioapi::versionInfo()
 sessionInfo()
 ```
 
