@@ -1,0 +1,23 @@
+{
+    "collab_server" : "",
+    "contents" : "---\ntitle: \"R180_cor_with_FB_visualize\"\nauthor: \"fkeita\"\ndate: \"2018/10/20\"\noutput: html_document\n---\n\n\n```{r setup}\nknitr::opts_chunk$set(echo = TRUE, cache = TRUE,cache.lazy = FALSE, echo=TRUE)\nsource(\"http://bioconductor.org/biocLite.R\")\nrequire(\"stringr\")\nrequire(\"tidyverse\")\nrequire(\"MASS\")\n\nrequire(extrafont)\nloadfonts(quiet = T)\n\n\nset.seed(\"20181020\")\n\noutput_dir <- \"./output_dir\"\n#dir.create(output_dir)\n```\n\n\n```{r}\nc <- read.table(file = \"./category_cor.csv\", sep = \",\", header = T, stringsAsFactors = F, row.names = 1)\n\nn_max <- 27\n\nc_b <- c %>%\n  dplyr::select(B) %>%\n  mutate(nm = rownames(.)) %>%\n  mutate(nm_f=factor(nm, levels = nm)) %>%\n  mutate(nm_f2=factor(nm, levels = rev(nm))) %>%\n  dplyr::filter(as.numeric(nm_f) < n_max)\n\n```\n\n```{r}\nbp <- ggplot()+theme_classic()+\n  theme(text = element_text(family = \"Arial\",size=14,lineheight = 0.7))+\n  geom_bar(data = c_b, mapping = aes(x=nm_f2, y=B), stat = \"identity\")+\n  coord_flip(expand = F,ylim = c(0.5, 1.01))+\n  xlab(\"\")+ylab(\"Correlation with B\")\n\nbp\n\nggsave(filename = \"bar.png\",plot = bp, device = \"png\",dpi = 300,width = 9, height = 16,units = \"cm\")\n```\n\n\n\n```{r}\ndf <- c\nlabel <- \"Hepatocytes\"\n\n#rm(df, label)\n#dir.create(\"./pngdir\")\ngetBar <- function(df, label, n_max =27){\n  df_label <- df %>%\n      .[sort.list(.[[label]],decreasing = T),] %>%\n  dplyr::select(label) %>%\n  mutate(nm = rownames(.)) %>%\n  mutate(nm_f=factor(nm, levels = nm)) %>%\n  mutate(nm_f2=factor(nm, levels = rev(nm))) %>%\n  dplyr::filter(as.numeric(nm_f) < n_max) %>%\n  mutate(tag = .[[label]])\n  \n  x_label <- paste(\"Correlation with \", label, sep = \"\")\n  \n  bp_x <- ggplot()+theme_classic()+\n  theme(text = element_text(family = \"Arial\",size=14,lineheight = 0.7))+\n  geom_bar(data = df_label, mapping = aes(x=nm_f2, y=tag), stat = \"identity\")+\n  coord_flip(expand = F,ylim = c(0.5, 1.01))+\n  xlab(\"\")+ylab(x_label)\n  \n  grid::grid.draw(bp_x)\n  \n  file_name <- paste(output_dir, \"/bar_\", label, \".png\", sep = \"\")\n  \n  ggsave(filename = file_name, plot = bp_x, device = \"png\",dpi = 300,width = 9, height = 16,units = \"cm\")\n  \n}\n\n```\n\n```{r}\ngetBar(df = c, label = \"Hepatocytes\")\ngetBar(df = c, label =\"A\")\ngetBar(df = c, label =\"Fibroblasts\")\ngetBar(df = c, label =\"B\")\n\n```\n\n\n##sessioninfo\n```{r}\nsessionInfo()\nSys.time()\nSys.info()\n```\n\n##function for save attached pkgs from sessioninfo\n```{r}\nses2ris <- function(dir=\"./ses_ris\", ver=T){\n  require(\"magrittr\")\n  require(\"stringr\")\n \n  if(!file.exists(dir)){\n    dir.create(dir)\n  }\n \n  end_out <- function(pac, ver, dir){\n    pac_ver <- packageVersion(pac)\n \n    if(ver){\n      out_file <- paste(pac, \"_\", pac_ver, \".ris\",sep = \"\")\n    }else{\n      out_file <- paste(pac, \".ris\",sep = \"\")\n    }\n    print(out_file)\n \n    ##pac_cit <- utils:::print.bibentry(citation(pac), style = \"Bibtex\")\n    pac_cit <- print(citation(pac),bibtex=TRUE)\n \n    double_q <- \"\\\"\"\n    if(!is.na(pac_cit[1]$title)){\n      pac_cit[1]$title <- str_replace(pac_cit[1]$title, \"---\", \":\")\n      pac_cit[1]$title <- str_replace_all(pac_cit[1]$title, \"\\\\'\", double_q)\n    }\n\n    capture.output(toBibtex(pac_cit),file = \"tmp.bib\")\n   \n    sys_code <- paste(\"bib2xml tmp.bib | xml2ris  > \", dir, \"/\", out_file, sep=\"\")\n    print(sys_code)\n    system(sys_code)\n  }\n \n  pacs <- sessionInfo() %>%\n    .$otherPkgs %>%\n    names(.)\n  print(pacs)\n  sapply(X = pacs, FUN = end_out, ver=ver, dir=dir)\n \n  file.remove(\"./tmp.bib\")\n}\n\nses2ris()\n```\n\n\n",
+    "created" : 1540018652886.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "952116478",
+    "id" : "33FA692",
+    "lastKnownWriteTime" : 1540948417,
+    "last_content_update" : 1540948417799,
+    "path" : "/home/dryad/Desktop/disk02/share/Dropbox/Rsta/R180_cor_with_FB_visualize/R180_cor_with_FB_visualize.Rmd",
+    "project_path" : null,
+    "properties" : {
+        "chunk_output_type" : "console",
+        "last_setup_crc32" : "",
+        "tempName" : "Untitled1"
+    },
+    "relative_order" : 1,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_markdown"
+}

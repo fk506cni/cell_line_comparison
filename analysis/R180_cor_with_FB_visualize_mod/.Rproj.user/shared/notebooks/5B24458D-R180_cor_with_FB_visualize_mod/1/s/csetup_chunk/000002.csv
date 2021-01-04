@@ -1,0 +1,4 @@
+"0","knitr::opts_chunk$set(echo = TRUE, cache = TRUE,cache.lazy = FALSE, echo=TRUE)"
+"0","source(""http://bioconductor.org/biocLite.R"")"
+"2"," エラー: With R version 3.5 or greater, install Bioconductor packages using BiocManager; see https://bioconductor.org/install
+"

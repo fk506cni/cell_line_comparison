@@ -1,0 +1,386 @@
+---
+title: "R180_cor_with_FB_visualize_mod"
+author: "fkeita"
+date: "2018/10/20"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+
+```{r setup}
+knitr::opts_chunk$set(echo = TRUE, cache = TRUE,cache.lazy = FALSE, echo=TRUE)
+# source("http://bioconductor.org/biocLite.R")
+require("stringr")
+require("tidyverse")
+require("MASS")
+
+require(extrafont)
+loadfonts(quiet = T)
+
+
+set.seed("20181020")
+
+output_dir <- "./output_dir"
+#dir.create(output_dir)
+```
+
+
+```{r}
+outputdir <- "./figs/"
+
+ggsave2 <- function(plot, wid=9, hei=9){
+  plot_name <- deparse(substitute(plot))
+  file_name <- paste(outputdir,plot_name, ".png", sep = "",collapse = "")
+  ggsave(filename = file_name,plot = plot,device = "png",width = wid, height = hei,dpi = 300,units = "cm")
+}
+
+ggsave2_pdf <- function(plot, wid=9, hei=9){
+  plot_name <- deparse(substitute(plot))
+  file_name <- paste(outputdir,plot_name, ".pdf", sep = "",collapse = "")
+  ggsave(filename = file_name,plot = plot,device = "pdf",width = wid, height = hei,dpi = 300,units = "cm")
+}
+
+
+
+ggsave2_f <- function(plot,path, wid=9, hei=9){
+  plot_name <- deparse(substitute(plot))
+  file_name <- path
+    # paste(outputdir, plot_name, ".tif", sep = "",collapse = "")
+  ggsave(filename = file_name,plot = plot,device = "tiff",width = wid, height = hei,dpi = 300,units = "cm")
+}
+
+ggsave3 <- function(plot, path, wid=8.2, hei=8.2, dev= "png"){
+  #plot_name <- deparse(substitute(plot))
+  plot_name <- path
+  file_name <- path
+  # file_name <- paste(plot_name, ".png", sep = "",collapse = "")
+  ggsave(filename = file_name,plot = plot,device = dev,width = wid, height = hei,dpi = 300,units = "cm")
+}
+
+df_all_chr <- function(df){
+  for (i in c(1, ncol(df))){
+    df[[i]] <- as.character(df[[i]])
+  }
+  return(df)
+}
+
+theme_ggh <- function(font.size=10,legend.position = "none", fam = "Arial") {
+  theme(axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.title = element_blank(),
+        axis.line = element_blank(),
+        axis.ticks = element_blank(),
+        plot.title = element_blank(),
+        panel.grid = element_blank(),
+        panel.border = element_blank(),
+        panel.spacing = element_blank(),
+        panel.background = element_blank(),
+        plot.background = element_blank(),
+        plot.margin = unit(c(0,0,0,0),"cm"),
+        text = element_text(family = fam ,size=font.size,lineheight = 0.7)
+        # ,
+        # legend.position = "none")
+  )
+}
+
+inch2cm <- function(x){
+  return(x/0.39370)
+}
+cm2inch <- function(x){
+  return(0.39370*x)
+}
+
+p2cm <- function(x){
+  return(as.integer(0.008466666666666667 * x))
+}
+
+cm2p <- function(x){
+  return(as.integer(118.11023622047244 *x))
+}
+
+ggsave2_pptx <- function(plot, wid=9, hei=9){
+  
+  library(officer)
+  library(rvg)
+  
+  plot_name <- deparse(substitute(plot))
+  file_name <- paste(outputdir,plot_name, ".pptx", sep = "",collapse = "")
+  plot_ed <- rvg::dml(ggobj = plot,width = wid, height = hei)
+  
+  doc <- read_pptx() %>%
+    add_slide('Title and Content', 'Office Theme') %>%
+    ph_with(value = "", location = ph_location_type(type = "title")) %>%
+    ph_with(value = plot_ed, location = ph_location(type = "body",width = cm2inch(wid), height = cm2inch(hei),left = 2, top = 2))
+  doc %>%
+    print(target = file_name)
+}
+
+
+ggsave3_pptx <- function(plot, file_name, wid=9, hei=9){
+  
+  library(officer)
+  library(rvg)
+  
+  # plot_name <- deparse(substitute(plot))
+  # file_name <- paste("../figs_output/",plot_name, ".pptx", sep = "",collapse = "")
+  # file_name <- paste(file_name, ".pptx", sep = "",collapse = "")
+  plot_ed <- rvg::dml(ggobj = plot,width = wid, height = hei)
+  
+  doc <- read_pptx() %>%
+    add_slide('Title and Content', 'Office Theme') %>%
+    ph_with(value = "", location = ph_location_type(type = "title")) %>%
+    ph_with(value = plot_ed, location = ph_location(type = "body",width = cm2inch(wid), height = cm2inch(hei),left = 2, top = 2))
+  doc %>%
+    print(target = file_name)
+}
+
+
+
+#paste and print
+pp <- function(..., sep= "", rtn = FALSE){
+  s <- paste(..., sep = sep)
+  if(rtn){
+    return(s)
+  }else{
+    cat(s)
+  }
+}
+
+# -の表現ブレ問題
+coerceNeg <- function(v){
+  v <- v %>%
+    str_remove_all(., "\\(") %>%
+    str_remove_all(., "\\)") %>%
+    str_replace(., "－", "-")
+  v2 <- case_when(
+    v == "+" ~ "pos",
+    v == "-" ~ "neg",
+    v == "ー"~ "neg",
+    v == "‑" ~ "neg",
+    v == "‐" ~ "neg",
+    v == "–" ~ "neg",
+    v == "—" ~ "neg",
+    v == "―" ~ "neg",
+    v == "ｰ" ~ "neg",
+    v == "−" ~ "neg",
+    v == "－" ~ "neg",
+    T ~ NA_character_)
+  return(v2)
+}
+
+
+showFigMkdwn <- function(path, wid =6, hei = 9){
+  wid <- as.character(cm2p(wid))
+  # wid <- as.character(pcnt)
+  # hei <- cm2p(hei)
+  # pp("![](",path, " =",wid,"x)")
+  # pp("<img src=\"", filepath())
+  # pp("<img src=", path, " width=\"", wid, "\"/>")
+  pp("<img src=", path, " width=", wid, "/>")
+  # pp("<img src=", path, " width=\"", pcnt, "%\"/>")
+  # <img src="drawing.jpg" alt="drawing" width="200"/>
+}
+
+```
+
+
+```{r}
+c <- read.table(file = "./category_cor.csv", sep = ",", header = T, stringsAsFactors = F, row.names = 1)
+
+n_max <- 27
+
+c_b <- c %>%
+  dplyr::select(B) %>%
+  mutate(nm = rownames(.)) %>%
+  mutate(nm = ifelse(nm == "Neuron", "Glia", nm)) %>%
+  mutate(nm_f=factor(nm, levels = nm)) %>%
+  mutate(nm_f2=factor(nm, levels = rev(nm))) %>%
+  # mutate(categ = case_when(
+  #   nm %in% c("Fibroblasts", "SMC", "")
+  # ))
+  dplyr::filter(as.numeric(nm_f) < n_max)
+
+  
+
+```
+
+```{r}
+c_b$nm
+```
+
+
+```{r}
+bp <- ggplot()+theme_classic()+
+  theme(text = element_text(family = "Arial",size=14,lineheight = 0.7))+
+  geom_bar(data = c_b, mapping = aes(x=nm_f2, y=B), stat = "identity")+
+  coord_flip(expand = F,ylim = c(0.5, 1.01))+
+  xlab("")+ylab("Correlation with B")
+
+bp
+
+ggsave(filename = "bar.png",plot = bp, device = "png",dpi = 300,width = 9, height = 16,units = "cm")
+```
+
+```{r}
+
+```
+
+
+
+```{r}
+require(ggpubr)
+
+c_b <-  c %>%
+  dplyr::select(B) %>%
+  mutate(nm = rownames(.)) %>%
+  mutate(nm = ifelse(nm == "Neuron", "Glia", nm)) %>%
+  mutate(nm = ifelse(nm == "Epitel", "Bronchial epithel", nm)) %>%
+  mutate(nm = str_remove(nm, "s$")) %>%
+  mutate(nm_f=factor(nm, levels = nm)) %>%
+  mutate(nm_f2=factor(nm, levels = rev(nm))) %>%
+  dplyr::filter(as.numeric(nm_f) < n_max)
+
+
+f_categ <- "../137PCA_renormalize_redo/matrix4cor_analysis.xlsx"
+df_4cor_org <- openxlsx::read.xlsx(f_categ)
+df_4cor <- df_4cor_org%>%
+  dplyr::select(one_of(c("id","category"))) %>%
+  dplyr::rename(category_det = category)
+# f_categ_rgh <- "../137PCA_renormalize_redo/categ4.tsv"
+# f_categ_rgh <- "../137PCA_renormalize_redo/"
+# df_4cor_rgh <- data.table::fread(f_categ_rgh)
+
+f_categ_rgh2 <- "../137PCA_renormalize_redo/sample_info.xlsx"
+df_sample <- openxlsx::read.xlsx(f_categ_rgh2) %>%
+  dplyr::select(one_of(c("id","category"))) %>%
+  dplyr::rename(category_rgh = category)
+
+categs <- dplyr::inner_join(df_4cor, df_sample, on = "id") %>%
+  dplyr::select(-id) %>%
+  dplyr::distinct() %>%
+  mutate(category_det = ifelse(category_det == "Neuron", "Glia", category_det)) %>%
+  mutate(category_det = ifelse(category_det == "Epitel", "Bronchial epithel", category_det)) %>%
+  mutate(category_det = str_remove(category_det, "s$")) 
+
+f_categ_col3 <- "../137PCA_renormalize_redo/setting_newcol3.rds"
+cols3 <- base::readRDS(f_categ_col3)
+
+c_b2 <- merge(c_b, categs, by.x="nm", by.y="category_det", all.x = T) %>%
+  mutate(cat_f = factor(category_rgh, levels = names(cols3))) #
+
+bp2 <- ggplot()+theme_pubr(legend = "right")+
+  theme(text = element_text(family = "Arial",size=14,lineheight = 0.7))+
+  geom_bar(data = c_b2, mapping = aes(x=nm_f2, y=B, fill=cat_f),color="black", stat = "identity")+
+  scale_fill_manual(values = cols3)+
+  coord_flip(expand = F,ylim = c(0.5, 1.01))+
+  xlab("")+ylab("Correlation with B")+labs(fill="Major Category")
+
+bp2
+cor_bar2_bp2 <- bp2
+ggsave3(plot = cor_bar2_bp2,wid = 16, hei = 16,path = "./figs/cor_bar2_bp2.tif", dev = "tiff")
+ggsave3(plot = cor_bar2_bp2,wid = 16, hei = 16,path = "./figs/R180_cor_bar2_bp2.tif", dev = "tiff")
+ggsave2_pptx(plot = cor_bar2_bp2,wid = 16, hei = 16)
+# cols3
+```
+
+
+```{r}
+df <- c
+label <- "Hepatocytes"
+
+#rm(df, label)
+#dir.create("./pngdir")
+getBar <- function(df, label, n_max =27){
+  df_label <- df %>%
+      .[sort.list(.[[label]],decreasing = T),] %>%
+  dplyr::select(label) %>%
+  mutate(nm = rownames(.)) %>%
+  mutate(nm_f=factor(nm, levels = nm)) %>%
+  mutate(nm_f2=factor(nm, levels = rev(nm))) %>%
+  dplyr::filter(as.numeric(nm_f) < n_max) %>%
+  mutate(tag = .[[label]])
+  
+  x_label <- paste("Correlation with ", label, sep = "")
+  
+  bp_x <- ggplot()+theme_classic()+
+  theme(text = element_text(family = "Arial",size=14,lineheight = 0.7))+
+  geom_bar(data = df_label, mapping = aes(x=nm_f2, y=tag), stat = "identity")+
+  coord_flip(expand = F,ylim = c(0.5, 1.01))+
+  xlab("")+ylab(x_label)
+  
+  grid::grid.draw(bp_x)
+  
+  file_name <- paste(output_dir, "/bar_", label, ".png", sep = "")
+  
+  ggsave(filename = file_name, plot = bp_x, device = "png",dpi = 300,width = 9, height = 16,units = "cm")
+  
+}
+
+```
+
+```{r}
+getBar(df = c, label = "Hepatocytes")
+getBar(df = c, label ="A")
+getBar(df = c, label ="Fibroblasts")
+getBar(df = c, label ="B")
+
+```
+
+
+##sessioninfo
+```{r}
+sessionInfo()
+Sys.time()
+Sys.info()
+```
+
+##function for save attached pkgs from sessioninfo
+```{r}
+ses2ris <- function(dir="./ses_ris", ver=T){
+  require("magrittr")
+  require("stringr")
+ 
+  if(!file.exists(dir)){
+    dir.create(dir)
+  }
+ 
+  end_out <- function(pac, ver, dir){
+    pac_ver <- packageVersion(pac)
+ 
+    if(ver){
+      out_file <- paste(pac, "_", pac_ver, ".ris",sep = "")
+    }else{
+      out_file <- paste(pac, ".ris",sep = "")
+    }
+    print(out_file)
+ 
+    ##pac_cit <- utils:::print.bibentry(citation(pac), style = "Bibtex")
+    pac_cit <- print(citation(pac),bibtex=TRUE)
+ 
+    double_q <- "\""
+    if(!is.na(pac_cit[1]$title)){
+      pac_cit[1]$title <- str_replace(pac_cit[1]$title, "---", ":")
+      pac_cit[1]$title <- str_replace_all(pac_cit[1]$title, "\\'", double_q)
+    }
+
+    capture.output(toBibtex(pac_cit),file = "tmp.bib")
+   
+    sys_code <- paste("bib2xml tmp.bib | xml2ris  > ", dir, "/", out_file, sep="")
+    print(sys_code)
+    system(sys_code)
+  }
+ 
+  pacs <- sessionInfo() %>%
+    .$otherPkgs %>%
+    names(.)
+  print(pacs)
+  sapply(X = pacs, FUN = end_out, ver=ver, dir=dir)
+ 
+  file.remove("./tmp.bib")
+}
+
+ses2ris()
+```
+
+

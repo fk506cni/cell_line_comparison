@@ -1,0 +1,26 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1607868850366.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "0",
+    "id" : "5B4F4718",
+    "lastKnownWriteTime" : 1609726937,
+    "last_content_update" : 1609726937907,
+    "path" : "G:/マイドライブ/Analysis/Prj37_cellline_comparison/R180_cor_with_FB_visualize_mod/R180_cor_with_FB_visualize_mod.Rmd",
+    "project_path" : "R180_cor_with_FB_visualize_mod.Rmd",
+    "properties" : {
+        "chunk_output_type" : "console",
+        "cursorPosition" : "279,7",
+        "scrollLine" : "259"
+    },
+    "read_only" : false,
+    "read_only_alternatives" : [
+    ],
+    "relative_order" : 1,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_markdown"
+}

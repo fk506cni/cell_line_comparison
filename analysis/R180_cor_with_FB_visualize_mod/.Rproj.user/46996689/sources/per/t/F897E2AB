@@ -1,0 +1,32 @@
+{
+    "id": "F897E2AB",
+    "path": null,
+    "project_path": null,
+    "type": "r_dataframe",
+    "hash": "0",
+    "contents": "",
+    "dirty": false,
+    "created": 1604905457430.0,
+    "source_on_save": false,
+    "relative_order": 5,
+    "properties": {
+        "expression": "df_4cor",
+        "caption": "df_4cor",
+        "totalObservations": 741,
+        "displayedObservations": 741,
+        "variables": 2,
+        "cacheKey": "C15DBEB9",
+        "object": "df_4cor",
+        "environment": "",
+        "contentUrl": "grid_resource/gridviewer.html?env=&obj=df_4cor&cache_key=C15DBEB9&max_cols=50",
+        "preview": 0
+    },
+    "folds": "",
+    "lastKnownWriteTime": 14355464333688901,
+    "encoding": "",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1604905457430,
+    "read_only": false,
+    "read_only_alternatives": []
+}

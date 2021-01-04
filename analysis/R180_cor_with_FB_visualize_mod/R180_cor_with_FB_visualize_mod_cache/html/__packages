@@ -1,0 +1,17 @@
+base
+stringr
+tidyverse
+ggplot2
+tibble
+tidyr
+readr
+purrr
+dplyr
+forcats
+MASS
+extrafont
+ggpubr
+officer
+rvg
+gdtools
+magrittr
